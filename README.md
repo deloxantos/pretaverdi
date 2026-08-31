@@ -43,6 +43,13 @@ uv run pytest -m live   # optional: smoke tests against the real API
 
 Requires Python 3.12+ and [uv](https://docs.astral.sh/uv/).
 
+## Notebooks
+
+Guided walkthroughs with outputs committed — they render directly on GitHub, no execution needed:
+
+- [`01-open-meteo-exploration.ipynb`](notebooks/01-open-meteo-exploration.ipynb) — is open reanalysis data (ERA5) good enough to build agri-risk indicators on?
+- [`02-cmip6-multi-model-projections.ipynb`](notebooks/02-cmip6-multi-model-projections.ipynb) — CMIP6 projections and why one climate model is never enough.
+
 ## Project Structure
 
 ```
