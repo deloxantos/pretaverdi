@@ -15,7 +15,7 @@ and deviations from the [original PRD](docs/prd/phase1-foundation.md) are
 recorded in [docs/architecture.md](docs/architecture.md).
 
 - [x] Open-Meteo Archive API integration (historical ERA5 reanalysis) — validated against the live API
-- [ ] Open-Meteo Climate API integration (CMIP6 projections) — partial: mock-tested only; multi-model response parsing pending
+- [x] Open-Meteo Climate API integration (CMIP6 projections) — validated against the live API, multi-model parsing included
 - [x] Open-Meteo Forecast API integration — client ready, mock-tested
 - [x] Data quality assessment for Pampa (AR) and Midwest (US) — see [docs/data-quality-report.md](docs/data-quality-report.md)
 - [ ] Multi-region data quality assessment (Punjab, Central Kenya)
@@ -38,6 +38,7 @@ uv run jupyter lab
 # Run tests
 uv sync --all-extras
 uv run pytest
+uv run pytest -m live   # optional: smoke tests against the real API
 ```
 
 Requires Python 3.12+ and [uv](https://docs.astral.sh/uv/).
@@ -72,7 +73,7 @@ Temperature, precipitation, evapotranspiration (FAO ET₀), soil moisture, and s
 
 - **Traceability**: Every API query is logged with parameters and response metadata
 - **Limitations documented**: Each notebook ends with a limitations section
-- **Uncertainty**: Climate projections must report ranges across models, not single-point estimates (planned — multi-model parsing is not yet implemented)
+- **Uncertainty**: Climate projections must report ranges across models, not single-point estimates — `get_climate_projections` returns all requested models as `(variable, model)` columns by default
 - **Reproducibility**: All notebooks are executable from scratch with `uv run jupyter lab`
 - **Correlation ≠ causation**: Climate data alone does not predict crop yields
 

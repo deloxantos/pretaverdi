@@ -55,20 +55,42 @@ _Observed on 2026-07-28 UTC by executing `notebooks/01-open-meteo-exploration.ip
 ## Climate API (CMIP6 Projections)
 
 ### Known Limitations
-- Soil moisture is not usable across both CMIP6 models: `soil_moisture_0_to_10cm_mean`
-  returns an all-null series for `EC_Earth3P_HR`; only `MRI_AGCM3_2_S` returns data
-  (live probe, 2026-07-28 UTC). This is why soil moisture was dropped from
-  `CLIMATE_DEFAULTS` in `src/pretaverdi/variables.py`.
-- Multi-model requests are not yet supported by the client. Requesting more than
-  one model returns a response with models × variables series, and
-  `get_climate_projections()`'s variable-count guard raises on the mismatch —
-  deliberately, to avoid silently mislabeling data. Single-model requests only,
-  until the client is extended to parse the multi-model shape.
+- Soil moisture is not usable across the default CMIP6 models:
+  `soil_moisture_0_to_10cm_mean` returns an all-null series for `EC_Earth3P_HR`
+  and `FGOALS_f3_H`; only `MRI_AGCM3_2_S` returns data (live probes, 2026-07-28
+  and 2026-08-31 UTC). The API returns the all-null series without any error.
+  This is why soil moisture is excluded from `CLIMATE_DEFAULTS` in
+  `src/pretaverdi/variables.py`.
 - Resolution ~25km — coarser than ERA5
-- Projections carry inherent uncertainty — always report model ranges
+- Projections carry inherent uncertainty — always report model ranges (the
+  client's default is now three models for exactly this reason)
 
 ### Findings
-_To be filled in future exploration._
+
+_Observed on 2026-08-31 UTC by probing the live Climate API for Pampa, AR
+(-34.6, -58.4)._
+
+- **Multi-model responses arrive as one message per model.** A request for N
+  models returns N FlatBuffers messages, in requested order, each carrying the
+  requested variables in requested order (verified via the SDK's
+  `Variable()`/`Aggregation()` codes) and identified by `response.Model()`. The
+  earlier reading of the response shape — "models × variables series in a
+  single response" (recorded here on 2026-07-28) — was incorrect: the old
+  variable-count guard never fired on multi-model requests, and the client
+  silently returned only the first model's data. `get_climate_projections()`
+  now parses all messages into `(variable, model)` columns and verifies the
+  returned model set against the request.
+- **`timezone=auto` is accepted** and shifts the daily index to local midnight,
+  matching the Archive and Forecast endpoints. Without it, climate frames sat
+  at 00:00 UTC while archive frames sat at local midnight — a raw timestamp
+  join between baseline and projections would have silently misaligned by 3-5
+  hours.
+- **`FGOALS_f3_H` returns complete data** (0% null) for the three
+  `CLIMATE_DEFAULTS` variables, so it joined the default model list —
+  three models make the default a range, not a pair.
+- **Soil moisture availability by model** (`soil_moisture_0_to_10cm_mean`,
+  Jan 2030): `EC_Earth3P_HR` 100% null, `FGOALS_f3_H` 100% null,
+  `MRI_AGCM3_2_S` full data. See Known Limitations above.
 
 ## Forecast API
 
