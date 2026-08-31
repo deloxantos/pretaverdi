@@ -9,7 +9,8 @@ Agri-climate risk assessment tool. Phase 1 focuses on understanding Open-Meteo c
 ```bash
 uv sync                          # Install dependencies
 uv sync --all-extras             # Install with dev dependencies (pytest, ruff)
-uv run pytest tests/             # Run tests
+uv run pytest tests/             # Run tests (mocked; live tests deselected)
+uv run pytest -m live            # Opt-in smoke tests against the real API
 uv run ruff check .              # Lint (same command as CI)
 uv run jupyter lab               # Launch notebooks
 ```
@@ -43,5 +44,5 @@ src/pretaverdi/
 - Query metadata is logged to `.cache/query_log.jsonl` (append mode, gitignored)
 - API responses are cached in `.cache/open_meteo_cache.sqlite` (1h TTL)
 - Notebooks end with a Findings & Limitations section
-- Tests mock the SDK — no real API calls in tests
+- Unit tests mock the SDK; a small opt-in live suite (`uv run pytest -m live`) hits the real API. CI runs mocked tests only
 - Cache and query log live in `<repo-root>/.cache/` regardless of cwd; override with `PRETAVERDI_CACHE_DIR`
