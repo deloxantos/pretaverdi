@@ -9,20 +9,25 @@ from pathlib import Path
 import openmeteo_requests
 import pandas as pd
 import requests_cache
+from openmeteo_sdk.Model import Model as _Model
 from retry_requests import retry
 
 from pretaverdi.variables import (
     AGRI_DAILY_DEFAULTS,
     ARCHIVE_API_URL,
     CLIMATE_API_URL,
+    CLIMATE_DEFAULT_MODELS,
     CLIMATE_DEFAULTS,
     FORECAST_API_URL,
-    SOIL_MOISTURE_MODELS,
 )
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[2]
 CACHE_DIR = Path(os.environ.get("PRETAVERDI_CACHE_DIR", _PROJECT_ROOT / ".cache"))
 QUERY_LOG_PATH = CACHE_DIR / "query_log.jsonl"
+
+# Reverse map: FlatBuffers model enum id -> API model name. The enum attribute
+# names match the names the Climate API accepts (e.g. EC_Earth3P_HR = 46).
+_MODEL_NAMES = {v: k for k, v in vars(_Model).items() if isinstance(v, int)}
 
 
 def _validate_coords(lat: float, lon: float) -> None:
@@ -71,29 +76,13 @@ def log_query(endpoint: str, params: dict, response_shape: tuple[int, ...]) -> N
         f.write(json.dumps(entry) + "\n")
 
 
-def _fetch_daily_dataframe(
-    url: str, params: dict, variables: list[str]
-) -> pd.DataFrame:
-    """Invoke an Open-Meteo endpoint and build a date-indexed daily DataFrame."""
-    client = _get_session()
-    responses = client.weather_api(url, params=params)
-    if not responses:
-        raise RuntimeError(f"Open-Meteo returned no results for {url}")
-    response = responses[0]
-
-    daily = response.Daily()
+def _daily_to_dataframe(daily, variables: list[str], url: str) -> pd.DataFrame:
+    """Build a date-indexed frame from one response message's Daily block."""
     if daily.VariablesLength() != len(variables):
-        msg = (
+        raise RuntimeError(
             f"expected {len(variables)} variables in response from {url}, "
             f"got {daily.VariablesLength()}"
         )
-        models = params.get("models")
-        if isinstance(models, list) and len(models) > 1:
-            msg += (
-                " (multi-model responses are not yet parsed — pass a"
-                " single-element models list; see docs/data-quality-report.md)"
-            )
-        raise RuntimeError(msg)
     data = {
         "date": pd.date_range(
             start=pd.to_datetime(daily.Time(), unit="s", utc=True),
@@ -107,7 +96,47 @@ def _fetch_daily_dataframe(
     for i, var in enumerate(variables):
         data[var] = daily.Variables(i).ValuesAsNumpy()
 
-    df = pd.DataFrame(data).set_index("date")
+    return pd.DataFrame(data).set_index("date")
+
+
+def _fetch_daily_dataframe(
+    url: str, params: dict, variables: list[str]
+) -> pd.DataFrame:
+    """Invoke an Open-Meteo endpoint and build a date-indexed daily DataFrame."""
+    client = _get_session()
+    responses = client.weather_api(url, params=params)
+    if not responses:
+        raise RuntimeError(f"Open-Meteo returned no results for {url}")
+
+    df = _daily_to_dataframe(responses[0].Daily(), variables, url)
+    log_query(url, params, df.shape)
+    return df
+
+
+def _fetch_daily_multimodel(
+    url: str, params: dict, variables: list[str], models: list[str]
+) -> pd.DataFrame:
+    """Fetch one message per model and assemble (variable, model) columns."""
+    client = _get_session()
+    responses = client.weather_api(url, params=params)
+    if len(responses) != len(models):
+        raise RuntimeError(
+            f"expected one response per model ({len(models)}) from {url}, "
+            f"got {len(responses)}"
+        )
+    frames = {
+        _MODEL_NAMES.get(r.Model(), f"unknown_{r.Model()}"): _daily_to_dataframe(
+            r.Daily(), variables, url
+        )
+        for r in responses
+    }
+    if set(frames) != set(models):
+        raise RuntimeError(
+            f"response models {sorted(frames)} do not match requested {models}"
+        )
+    df = pd.concat(frames, axis=1).swaplevel(axis=1)
+    df = df[[(var, model) for var in variables for model in models]]
+    df.columns.names = ["variable", "model"]
     log_query(url, params, df.shape)
     return df
 
@@ -157,24 +186,28 @@ def get_climate_projections(
 ) -> pd.DataFrame:
     """Fetch CMIP6 climate projections from Open-Meteo Climate API.
 
-    Multi-model responses are not yet parsed — pass a single-element ``models``
-    list; see docs/data-quality-report.md (Climate API, Known Limitations).
+    The API returns one response message per requested model. With a single
+    model the result keeps the flat shape of the other endpoints; with several
+    models the columns become a (variable, model) MultiIndex, so e.g.
+    ``df["temperature_2m_max"]`` is a date × models frame ready for
+    min/mean/max spread bands across the ensemble.
 
     Args:
         lat: Latitude of the location.
         lon: Longitude of the location.
         start_date: Start date in YYYY-MM-DD format.
         end_date: End date in YYYY-MM-DD format.
-        models: List of CMIP6 model names. Defaults to SOIL_MOISTURE_MODELS.
+        models: List of CMIP6 model names. Defaults to CLIMATE_DEFAULT_MODELS.
         variables: List of daily variable names. Defaults to CLIMATE_DEFAULTS.
 
     Returns:
-        DataFrame with date index and requested variables as columns.
+        DataFrame with date index; flat variable columns for one model, or
+        (variable, model) MultiIndex columns for several.
     """
     _validate_coords(lat, lon)
     _validate_date_range(start_date, end_date)
     if models is None:
-        models = SOIL_MOISTURE_MODELS
+        models = CLIMATE_DEFAULT_MODELS
     if variables is None:
         variables = CLIMATE_DEFAULTS
 
@@ -185,8 +218,11 @@ def get_climate_projections(
         "end_date": end_date,
         "models": models,
         "daily": variables,
+        "timezone": "auto",
     }
-    return _fetch_daily_dataframe(CLIMATE_API_URL, params, variables)
+    if len(models) == 1:
+        return _fetch_daily_dataframe(CLIMATE_API_URL, params, variables)
+    return _fetch_daily_multimodel(CLIMATE_API_URL, params, variables, models)
 
 
 def get_forecast(

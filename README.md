@@ -15,9 +15,10 @@ and deviations from the [original PRD](docs/prd/phase1-foundation.md) are
 recorded in [docs/architecture.md](docs/architecture.md).
 
 - [x] Open-Meteo Archive API integration (historical ERA5 reanalysis) — validated against the live API
-- [ ] Open-Meteo Climate API integration (CMIP6 projections) — partial: mock-tested only; multi-model response parsing pending
+- [x] Open-Meteo Climate API integration (CMIP6 projections) — validated against the live API, multi-model parsing included
 - [x] Open-Meteo Forecast API integration — client ready, mock-tested
 - [x] Data quality assessment for Pampa (AR) and Midwest (US) — see [docs/data-quality-report.md](docs/data-quality-report.md)
+- [x] Multi-model CMIP6 exploration — see [notebooks/02-cmip6-multi-model-projections.ipynb](notebooks/02-cmip6-multi-model-projections.ipynb)
 - [ ] Multi-region data quality assessment (Punjab, Central Kenya)
 - [ ] Risk scenario prototyping
 - [ ] AgentCore Gateway + MCP tools (deferred from PRD — see ADR-001)
@@ -38,9 +39,17 @@ uv run jupyter lab
 # Run tests
 uv sync --all-extras
 uv run pytest
+uv run pytest -m live   # optional: smoke tests against the real API
 ```
 
 Requires Python 3.12+ and [uv](https://docs.astral.sh/uv/).
+
+## Notebooks
+
+Guided walkthroughs with outputs committed — they render directly on GitHub, no execution needed:
+
+- [`01-open-meteo-exploration.ipynb`](notebooks/01-open-meteo-exploration.ipynb) — is open reanalysis data (ERA5) good enough to build agri-risk indicators on?
+- [`02-cmip6-multi-model-projections.ipynb`](notebooks/02-cmip6-multi-model-projections.ipynb) — CMIP6 projections and why one climate model is never enough.
 
 ## Project Structure
 
@@ -72,7 +81,7 @@ Temperature, precipitation, evapotranspiration (FAO ET₀), soil moisture, and s
 
 - **Traceability**: Every API query is logged with parameters and response metadata
 - **Limitations documented**: Each notebook ends with a limitations section
-- **Uncertainty**: Climate projections must report ranges across models, not single-point estimates (planned — multi-model parsing is not yet implemented)
+- **Uncertainty**: Climate projections must report ranges across models, not single-point estimates — `get_climate_projections` returns all requested models as `(variable, model)` columns by default
 - **Reproducibility**: All notebooks are executable from scratch with `uv run jupyter lab`
 - **Correlation ≠ causation**: Climate data alone does not predict crop yields
 

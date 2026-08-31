@@ -13,3 +13,4 @@ jobs:
       - run: uv sync --all-extras
       - run: uv run ruff check .
       - run: uv run pytest -q
+      - run: uv run python -c "import glob, nbformat; [nbformat.validate(nbformat.read(p, as_version=4)) for p in glob.glob('notebooks/*.ipynb')]"
