@@ -6,6 +6,7 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 import pandas as pd
 import pytest
+from openmeteo_sdk.Model import Model
 
 from pretaverdi.client import (
     get_climate_projections,
@@ -17,10 +18,13 @@ from pretaverdi.variables import (
     AGRI_DAILY_DEFAULTS,
     ARCHIVE_API_URL,
     CLIMATE_API_URL,
+    CLIMATE_DEFAULT_MODELS,
     CLIMATE_DEFAULTS,
     FORECAST_API_URL,
-    SOIL_MOISTURE_MODELS,
 )
+
+# Enum ids for the default models, in CLIMATE_DEFAULT_MODELS order.
+_DEFAULT_MODEL_IDS = [Model.EC_Earth3P_HR, Model.MRI_AGCM3_2_S, Model.FGOALS_f3_H]
 
 
 def _mock_daily(num_vars: int, num_days: int = 10):
@@ -41,10 +45,11 @@ def _mock_daily(num_vars: int, num_days: int = 10):
     return daily
 
 
-def _mock_response(num_vars: int, num_days: int = 10):
-    """Create a mock Open-Meteo API response."""
+def _mock_response(num_vars: int, num_days: int = 10, model: int = 0):
+    """Create a mock Open-Meteo API response (one message = one model)."""
     response = MagicMock()
     response.Daily.return_value = _mock_daily(num_vars, num_days)
+    response.Model.return_value = model
     return response
 
 
@@ -92,22 +97,51 @@ class TestGetHistoricalWeather:
 
 class TestGetClimateProjections:
     @patch("pretaverdi.client._get_session")
-    def test_returns_dataframe(self, mock_session):
+    def test_single_model_returns_flat_dataframe(self, mock_session):
         num_vars = len(CLIMATE_DEFAULTS)
         mock_client = MagicMock()
-        mock_client.weather_api.return_value = [_mock_response(num_vars)]
+        mock_client.weather_api.return_value = [
+            _mock_response(num_vars, model=Model.MRI_AGCM3_2_S)
+        ]
+        mock_session.return_value = mock_client
+
+        df = get_climate_projections(
+            -34.6, -58.4, "2030-01-01", "2030-12-31", models=["MRI_AGCM3_2_S"]
+        )
+
+        assert isinstance(df, pd.DataFrame)
+        assert df.index.name == "date"
+        assert df.columns.tolist() == CLIMATE_DEFAULTS
+
+    @patch("pretaverdi.client._get_session")
+    def test_default_models_returns_multiindex(self, mock_session):
+        num_vars = len(CLIMATE_DEFAULTS)
+        mock_client = MagicMock()
+        mock_client.weather_api.return_value = [
+            _mock_response(num_vars, model=model_id)
+            for model_id in _DEFAULT_MODEL_IDS
+        ]
         mock_session.return_value = mock_client
 
         df = get_climate_projections(-34.6, -58.4, "2030-01-01", "2030-12-31")
 
-        assert isinstance(df, pd.DataFrame)
-        assert df.index.name == "date"
+        assert isinstance(df.columns, pd.MultiIndex)
+        assert list(df.columns.names) == ["variable", "model"]
+        assert df.shape == (10, num_vars * len(CLIMATE_DEFAULT_MODELS))
+        assert df["temperature_2m_max"].columns.tolist() == CLIMATE_DEFAULT_MODELS
+        expected_order = [
+            (var, model)
+            for var in CLIMATE_DEFAULTS
+            for model in CLIMATE_DEFAULT_MODELS
+        ]
+        assert df.columns.tolist() == expected_order
 
     @patch("pretaverdi.client._get_session")
     def test_uses_default_models(self, mock_session):
         mock_client = MagicMock()
         mock_client.weather_api.return_value = [
-            _mock_response(len(CLIMATE_DEFAULTS))
+            _mock_response(len(CLIMATE_DEFAULTS), model=model_id)
+            for model_id in _DEFAULT_MODEL_IDS
         ]
         mock_session.return_value = mock_client
 
@@ -115,7 +149,21 @@ class TestGetClimateProjections:
 
         call_args = mock_client.weather_api.call_args
         assert call_args[0][0] == CLIMATE_API_URL
-        assert call_args[1]["params"]["models"] == SOIL_MOISTURE_MODELS
+        assert call_args[1]["params"]["models"] == CLIMATE_DEFAULT_MODELS
+
+    @patch("pretaverdi.client._get_session")
+    def test_climate_sends_timezone_auto(self, mock_session):
+        mock_client = MagicMock()
+        mock_client.weather_api.return_value = [
+            _mock_response(len(CLIMATE_DEFAULTS), model=model_id)
+            for model_id in _DEFAULT_MODEL_IDS
+        ]
+        mock_session.return_value = mock_client
+
+        get_climate_projections(-34.6, -58.4, "2030-01-01", "2030-12-31")
+
+        call_args = mock_client.weather_api.call_args
+        assert call_args[1]["params"]["timezone"] == "auto"
 
 
 class TestGetForecast:
@@ -190,12 +238,28 @@ class TestResponseGuards:
             get_historical_weather(-34.6, -58.4, "2024-01-01", "2024-01-10")
 
     @patch("pretaverdi.client._get_session")
-    def test_multi_model_climate_request_raises_with_hint(self, mock_session):
+    def test_multimodel_response_count_mismatch_raises(self, mock_session):
         mock_client = MagicMock()
-        mock_client.weather_api.return_value = [_mock_response(6)]
+        mock_client.weather_api.return_value = [
+            _mock_response(len(CLIMATE_DEFAULTS), model=model_id)
+            for model_id in _DEFAULT_MODEL_IDS[:2]
+        ]
         mock_session.return_value = mock_client
 
-        with pytest.raises(RuntimeError, match="multi-model"):
+        with pytest.raises(RuntimeError, match="one response per model"):
+            get_climate_projections(-34.6, -58.4, "2030-01-01", "2030-12-31")
+
+    @patch("pretaverdi.client._get_session")
+    def test_multimodel_unexpected_model_raises(self, mock_session):
+        model_ids = [*_DEFAULT_MODEL_IDS[:2], Model.CMCC_CM2_VHR4]
+        mock_client = MagicMock()
+        mock_client.weather_api.return_value = [
+            _mock_response(len(CLIMATE_DEFAULTS), model=model_id)
+            for model_id in model_ids
+        ]
+        mock_session.return_value = mock_client
+
+        with pytest.raises(RuntimeError, match="do not match"):
             get_climate_projections(-34.6, -58.4, "2030-01-01", "2030-12-31")
 
 

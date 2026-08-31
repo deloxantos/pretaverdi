@@ -13,14 +13,17 @@ AGRI_DAILY_DEFAULTS = [
 ]
 
 # No soil moisture here: the Climate API's daily band is `soil_moisture_0_to_10cm_mean`,
-# but EC_Earth3P_HR returns all-null series for it, so it is not a usable default.
+# but EC_Earth3P_HR and FGOALS_f3_H return all-null series for it (live probe,
+# 2026-08-31 UTC); only MRI_AGCM3_2_S returns data, so it is not a usable default.
 CLIMATE_DEFAULTS = [
     "temperature_2m_max",
     "temperature_2m_min",
     "precipitation_sum",
 ]
 
-SOIL_MOISTURE_MODELS = ["EC_Earth3P_HR", "MRI_AGCM3_2_S"]
+# Default CMIP6 high-resolution models for climate projections. Three models so
+# defaults report a range, not a single trajectory (see README, AI for Good).
+CLIMATE_DEFAULT_MODELS = ["EC_Earth3P_HR", "MRI_AGCM3_2_S", "FGOALS_f3_H"]
 
 ARCHIVE_API_URL = "https://archive-api.open-meteo.com/v1/archive"
 CLIMATE_API_URL = "https://climate-api.open-meteo.com/v1/climate"
