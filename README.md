@@ -18,6 +18,7 @@ recorded in [docs/architecture.md](docs/architecture.md).
 - [x] Open-Meteo Climate API integration (CMIP6 projections) — validated against the live API, multi-model parsing included
 - [x] Open-Meteo Forecast API integration — client ready, mock-tested
 - [x] Data quality assessment for Pampa (AR) and Midwest (US) — see [docs/data-quality-report.md](docs/data-quality-report.md)
+- [x] Multi-model CMIP6 exploration — see [notebooks/02-cmip6-multi-model-projections.ipynb](notebooks/02-cmip6-multi-model-projections.ipynb)
 - [ ] Multi-region data quality assessment (Punjab, Central Kenya)
 - [ ] Risk scenario prototyping
 - [ ] AgentCore Gateway + MCP tools (deferred from PRD — see ADR-001)

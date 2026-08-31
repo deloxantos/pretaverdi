@@ -61,6 +61,10 @@ _Observed on 2026-07-28 UTC by executing `notebooks/01-open-meteo-exploration.ip
   and 2026-08-31 UTC). The API returns the all-null series without any error.
   This is why soil moisture is excluded from `CLIMATE_DEFAULTS` in
   `src/pretaverdi/variables.py`.
+- Model records differ in temporal coverage, and gaps can be encoded as zeros
+  rather than NaN: `EC_Earth3P_HR` ends in 2049 (all-NaN 2050), and
+  `FGOALS_f3_H`'s 2016 precipitation is zero on 350/366 days at both reference
+  sites — invisible to NaN checks. Check coverage and plausibility per model.
 - Resolution ~25km — coarser than ERA5
 - Projections carry inherent uncertainty — always report model ranges (the
   client's default is now three models for exactly this reason)
@@ -91,6 +95,28 @@ _Observed on 2026-08-31 UTC by probing the live Climate API for Pampa, AR
 - **Soil moisture availability by model** (`soil_moisture_0_to_10cm_mean`,
   Jan 2030): `EC_Earth3P_HR` 100% null, `FGOALS_f3_H` 100% null,
   `MRI_AGCM3_2_S` full data. See Known Limitations above.
+
+_Observed on 2026-08-31 UTC by executing
+`notebooks/02-cmip6-multi-model-projections.ipynb` against the live Climate API
+(2015-2050, three models) for Pampa, AR and Midwest, US._
+
+- **Per-model coverage differs even for "complete" variables.**
+  `EC_Earth3P_HR` carries 2.8% NaN in every default variable at both sites —
+  exactly the year 2050; its record ends in 2049.
+- **Gaps can be disguised as zeros.** `FGOALS_f3_H`'s 2016 has zero
+  precipitation on 350/366 days at both sites (annual totals 160 mm at Pampa,
+  31 mm at the Midwest) with 0% NaN. A plausibility floor (<300 mm/yr flagged
+  as missing) catches it; NaN checks cannot.
+- **Warming signal is robust across models; precipitation change is not.**
+  Decadal change (2015-2024 → 2041-2050, cleaned data): Pampa +0.6 to +0.8 °C
+  (spread 0.2 °C), Midwest +1.3 to +2.0 °C (spread 0.7 °C); precipitation
+  −21 to −98 mm/yr at Pampa (spread 77) and −50 to +57 mm/yr at the Midwest
+  (spread 106 — the models disagree on the sign). On raw (uncleaned) data the
+  same table showed sign disagreement at Pampa too, an artifact of the two
+  coverage issues above.
+- **Hindcast bias vs ERA5 (2015-2024 annual means)**: under 0.2 °C at Pampa,
+  +0.3 to +0.6 °C warm at the Midwest. Uninitialized runs weave in and out of
+  the ensemble envelope year-to-year, as expected; only levels are comparable.
 
 ## Forecast API
 
