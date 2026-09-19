@@ -84,7 +84,7 @@ Temperature, precipitation, evapotranspiration (FAO ET₀), soil moisture, and s
 - **Traceability**: Every API query is logged with parameters and response metadata
 - **Limitations documented**: Each notebook ends with a limitations section
 - **Uncertainty**: Climate projections must report ranges across models, not single-point estimates — `get_climate_projections` returns all requested models as `(variable, model)` columns by default
-- **Reproducibility**: All notebooks are executable from scratch with `uv run jupyter lab`
+- **Reproducibility**: All notebooks are executable from scratch with `uv run jupyter lab`. Notebook 02 makes large Climate API requests that can hit the free tier's per-minute limit; if that happens, wait a minute and re-run (responses are cached locally for 1 h)
 - **Correlation ≠ causation**: Climate data alone does not predict crop yields
 
 ## Data Licensing & Attribution
