@@ -147,6 +147,7 @@ def get_historical_weather(
     start_date: str,
     end_date: str,
     variables: list[str] | None = None,
+    model: str | None = None,
 ) -> pd.DataFrame:
     """Fetch historical weather data from Open-Meteo Archive API.
 
@@ -156,6 +157,9 @@ def get_historical_weather(
         start_date: Start date in YYYY-MM-DD format.
         end_date: End date in YYYY-MM-DD format.
         variables: List of daily variable names. Defaults to AGRI_DAILY_DEFAULTS.
+        model: By default the Archive API returns Open-Meteo's "Best Match"
+            blend of reanalysis and analysis datasets; pass e.g. "era5_land"
+            or "era5" to pin a single dataset.
 
     Returns:
         DataFrame with date index and requested variables as columns.
@@ -173,6 +177,8 @@ def get_historical_weather(
         "daily": variables,
         "timezone": "auto",
     }
+    if model is not None:
+        params["models"] = model
     return _fetch_daily_dataframe(ARCHIVE_API_URL, params, variables)
 
 

@@ -94,6 +94,34 @@ class TestGetHistoricalWeather:
 
         assert len(df.columns) == len(custom_vars)
 
+    @patch("pretaverdi.client._get_session")
+    def test_omits_models_by_default(self, mock_session):
+        mock_client = MagicMock()
+        mock_client.weather_api.return_value = [
+            _mock_response(len(AGRI_DAILY_DEFAULTS))
+        ]
+        mock_session.return_value = mock_client
+
+        get_historical_weather(-34.6, -58.4, "2024-01-01", "2024-01-10")
+
+        call_args = mock_client.weather_api.call_args
+        assert "models" not in call_args[1]["params"]
+
+    @patch("pretaverdi.client._get_session")
+    def test_model_pins_single_dataset(self, mock_session):
+        mock_client = MagicMock()
+        mock_client.weather_api.return_value = [
+            _mock_response(len(AGRI_DAILY_DEFAULTS))
+        ]
+        mock_session.return_value = mock_client
+
+        get_historical_weather(
+            -34.6, -58.4, "2024-01-01", "2024-01-10", model="era5_land"
+        )
+
+        call_args = mock_client.weather_api.call_args
+        assert call_args[1]["params"]["models"] == "era5_land"
+
 
 class TestGetClimateProjections:
     @patch("pretaverdi.client._get_session")
