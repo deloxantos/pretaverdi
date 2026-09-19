@@ -79,6 +79,15 @@ _Observed on 2026-07-28 UTC by executing `notebooks/01-open-meteo-exploration.ip
   regional averages only
 - Projections carry inherent uncertainty — always report model ranges (the
   client's default is now three models for exactly this reason)
+- The scenario is fixed: a single high-emission pathway, "as close to RCP8.5
+  as possible" per Open-Meteo, with no scenario choice in the API. Open-Meteo
+  notes that scenarios differ little before 2050.
+- The default models mix experiment designs: `MRI_AGCM3_2_S` is an
+  atmosphere-only model, run with prescribed sea-surface temperatures;
+  HighResMIP catalogues list the same design for `FGOALS_f3_H`, while
+  `EC_Earth3P_HR` is a coupled model. Open-Meteo does not state which
+  experiment it serves per model, so the model range is not a clean structural
+  spread.
 
 ### Findings
 
