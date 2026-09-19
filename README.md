@@ -87,6 +87,14 @@ Temperature, precipitation, evapotranspiration (FAO ET₀), soil moisture, and s
 - **Reproducibility**: All notebooks are executable from scratch with `uv run jupyter lab`
 - **Correlation ≠ causation**: Climate data alone does not predict crop yields
 
+## Data Licensing & Attribution
+
+- **Open-Meteo.** Weather and climate data by [Open-Meteo.com](https://open-meteo.com/), licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). The notebooks show derived values (aggregates, statistics, figures), not the original data. The free API tier is for non-commercial use only.
+- **ERA5 and ERA5-Land.** Contains modified Copernicus Climate Change Service information 2026. Neither the European Commission nor ECMWF is responsible for any use that may be made of the Copernicus information it contains.
+- **CMIP6.** We acknowledge the World Climate Research Programme, which coordinated CMIP6, and the modelling groups whose HighResMIP output is used here: the EC-Earth consortium, the Meteorological Research Institute (Japan) and the Chinese Academy of Sciences. The data reaches this project through Open-Meteo's downscaled Climate API under CC BY 4.0. See the [CMIP6 Terms of Use](https://pcmdi.llnl.gov/CMIP6/TermsOfUse).
+
+Citations: Zippenfenig, P. (2023), *Open-Meteo.com Weather API*, Zenodo, [doi:10.5281/zenodo.7970649](https://doi.org/10.5281/zenodo.7970649). Hersbach, H. et al. (2023), *ERA5 hourly data on single levels from 1940 to present*, Copernicus Climate Change Service, [doi:10.24381/cds.adbb2d47](https://doi.org/10.24381/cds.adbb2d47).
+
 ## License
 
-MIT
+MIT covers the code in this repository. The climate data, including data embedded in notebook outputs, remains under its providers' licences.
