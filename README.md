@@ -26,6 +26,8 @@ recorded in [docs/architecture.md](docs/architecture.md).
 
 ## Quickstart
 
+Requires Python 3.12+ and [uv](https://docs.astral.sh/uv/).
+
 ```bash
 # Clone and setup
 git clone https://github.com/deloxantos/pretaverdi.git
@@ -41,8 +43,6 @@ uv sync --all-extras
 uv run pytest
 uv run pytest -m live   # optional: smoke tests against the real API
 ```
-
-Requires Python 3.12+ and [uv](https://docs.astral.sh/uv/).
 
 ## Notebooks
 
