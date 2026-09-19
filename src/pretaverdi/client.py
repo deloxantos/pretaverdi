@@ -183,6 +183,7 @@ def get_climate_projections(
     end_date: str,
     models: list[str] | None = None,
     variables: list[str] | None = None,
+    disable_bias_correction: bool = False,
 ) -> pd.DataFrame:
     """Fetch CMIP6 climate projections from Open-Meteo Climate API.
 
@@ -199,6 +200,9 @@ def get_climate_projections(
         end_date: End date in YYYY-MM-DD format.
         models: List of CMIP6 model names. Defaults to CLIMATE_DEFAULT_MODELS.
         variables: List of daily variable names. Defaults to CLIMATE_DEFAULTS.
+        disable_bias_correction: By default Open-Meteo serves model output
+            statistically downscaled to ~10 km and bias-corrected against
+            ERA5-Land; set True to get the raw model output instead.
 
     Returns:
         DataFrame with date index; flat variable columns for one model, or
@@ -220,6 +224,8 @@ def get_climate_projections(
         "daily": variables,
         "timezone": "auto",
     }
+    if disable_bias_correction:
+        params["disable_bias_correction"] = True
     if len(models) == 1:
         return _fetch_daily_dataframe(CLIMATE_API_URL, params, variables)
     return _fetch_daily_multimodel(CLIMATE_API_URL, params, variables, models)

@@ -165,6 +165,56 @@ class TestGetClimateProjections:
         call_args = mock_client.weather_api.call_args
         assert call_args[1]["params"]["timezone"] == "auto"
 
+    @patch("pretaverdi.client._get_session")
+    def test_omits_bias_correction_by_default(self, mock_session):
+        mock_client = MagicMock()
+        mock_client.weather_api.return_value = [
+            _mock_response(len(CLIMATE_DEFAULTS), model=model_id)
+            for model_id in _DEFAULT_MODEL_IDS
+        ]
+        mock_session.return_value = mock_client
+
+        get_climate_projections(-34.6, -58.4, "2030-01-01", "2030-12-31")
+
+        call_args = mock_client.weather_api.call_args
+        assert "disable_bias_correction" not in call_args[1]["params"]
+
+    @patch("pretaverdi.client._get_session")
+    def test_disable_bias_correction_sends_flag(self, mock_session):
+        mock_client = MagicMock()
+        mock_client.weather_api.return_value = [
+            _mock_response(len(CLIMATE_DEFAULTS), model=model_id)
+            for model_id in _DEFAULT_MODEL_IDS
+        ]
+        mock_session.return_value = mock_client
+
+        get_climate_projections(
+            -34.6, -58.4, "2030-01-01", "2030-12-31", disable_bias_correction=True
+        )
+
+        call_args = mock_client.weather_api.call_args
+        assert call_args[1]["params"]["disable_bias_correction"] is True
+
+    @patch("pretaverdi.client._get_session")
+    def test_disable_bias_correction_single_model(self, mock_session):
+        mock_client = MagicMock()
+        mock_client.weather_api.return_value = [
+            _mock_response(len(CLIMATE_DEFAULTS), model=Model.MRI_AGCM3_2_S)
+        ]
+        mock_session.return_value = mock_client
+
+        get_climate_projections(
+            -34.6,
+            -58.4,
+            "2030-01-01",
+            "2030-12-31",
+            models=["MRI_AGCM3_2_S"],
+            disable_bias_correction=True,
+        )
+
+        call_args = mock_client.weather_api.call_args
+        assert call_args[1]["params"]["disable_bias_correction"] is True
+
 
 class TestGetForecast:
     @patch("pretaverdi.client._get_session")
