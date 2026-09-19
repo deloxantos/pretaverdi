@@ -35,10 +35,10 @@ def hindcast_annual(
 ) -> pd.DataFrame:
     """Fetch the annual temperature a hindcast compares: models vs reanalysis.
 
-    Runs the same recent period three ways — the projections Open-Meteo serves
-    (bias-corrected against ERA5-Land), the raw model output behind them, and
-    the reanalysis both are judged against — so the served correction can be
-    read as the gap it closes.
+    Fetches the same past period three times: the projections as Open-Meteo
+    serves them (bias-corrected against ERA5-Land), the raw model output, and
+    the reanalysis used as the reference. Comparing the three shows how much
+    of the agreement with the reference comes from the correction.
 
     Args:
         location: A LOCATIONS-style mapping with `lat` and `lon`.

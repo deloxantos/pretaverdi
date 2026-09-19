@@ -57,6 +57,8 @@ Guided walkthroughs with outputs committed — they render directly on GitHub, n
 pretaverdi/
 ├── src/pretaverdi/          # Python package
 │   ├── client.py            # Open-Meteo API wrapper (cache + retry + logging)
+│   ├── analysis.py          # Transforms and experiments over client data
+│   ├── plots.py             # Figures over analysis results
 │   └── variables.py         # Agri-climate variable constants
 ├── notebooks/               # Iterative exploration notebooks
 ├── docs/                    # PRDs, ADRs, data quality reports, API evaluation
