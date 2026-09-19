@@ -65,6 +65,13 @@ _Observed on 2026-07-28 UTC by executing `notebooks/01-open-meteo-exploration.ip
   rather than NaN: `EC_Earth3P_HR` ends in 2049 (all-NaN 2050), and
   `FGOALS_f3_H`'s 2016 precipitation is zero on 350/366 days at both reference
   sites — invisible to NaN checks. Check coverage and plausibility per model.
+- The served data is not raw model output. By default Open-Meteo statistically
+  downscales each model to ~10 km and applies a linear, monthly bias correction
+  against ERA5-Land (`disable_bias_correction=true` returns the raw output; the
+  client exposes it as `get_climate_projections(..., disable_bias_correction=True)`).
+  Agreement between served temperature levels and reanalysis is therefore
+  expected, and is not evidence of model skill. The correction assumes that
+  each model's bias stays constant in the future.
 - Resolution ~25km — coarser than ERA5
 - Projections carry inherent uncertainty — always report model ranges (the
   client's default is now three models for exactly this reason)
@@ -114,9 +121,23 @@ _Observed on 2026-08-31 UTC by executing
   (spread 106 — the models disagree on the sign). On raw (uncleaned) data the
   same table showed sign disagreement at Pampa too, an artifact of the two
   coverage issues above.
-- **Hindcast bias vs ERA5 (2015-2024 annual means)**: under 0.2 °C at Pampa,
-  +0.3 to +0.6 °C warm at the Midwest. Uninitialized runs weave in and out of
-  the ensemble envelope year-to-year, as expected; only levels are comparable.
+
+_Corrected on 2026-09-19 UTC after a review of notebook 02 §5; re-executed
+against the live Climate and Archive APIs._
+
+- **Hindcast (2015-2024 mean temperature): agreement with reanalysis comes from
+  the provider's bias correction.** Raw model output differs from ERA5-Land by
+  −0.89 to +0.74 °C, with no common sign; the served data is within −0.25 to
+  +0.37 °C. The spread between models drops from 0.85 to 0.15 °C at Pampa and
+  from 0.82 to 0.24 °C at the Midwest. The earlier reading recorded here on
+  2026-08-31 — "bias under 0.2 °C at Pampa, +0.3 to +0.6 °C warm at the
+  Midwest", presented as the models reproducing observed levels — was incorrect
+  on two counts: it compared already-corrected data with nearly the same
+  dataset it was corrected against, and it used the Archive API's default
+  Best Match blend, not ERA5-Land, as the reference. Per Open-Meteo, the linear
+  correction does not affect the climate change signal, so the decadal-change
+  finding above stands. Only period means are comparable: these runs do not
+  start from observed conditions, so individual years are not expected to match.
 
 ## Forecast API
 
