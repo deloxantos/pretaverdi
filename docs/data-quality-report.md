@@ -10,15 +10,18 @@
 | Temporal coverage | As expected | 2022-01-01 → 2023-12-31, 730 rows per location (two full non-leap years) |
 | Missing values | None | 0 NaN in every variable at both locations |
 | Value ranges | Plausible | All variables inside expected physical bounds (see Findings) |
-| Resolution | ~9km | ERA5 grid — does not capture micro-climate variation |
+| Resolution | ~9–25km | Best Match blend grid — does not capture micro-climate variation |
 
 _Observed on 2026-07-28 UTC by executing `notebooks/01-open-meteo-exploration.ipynb` against the live Archive API for Pampa, AR (-34.6, -58.4) and Midwest, US (41.9, -89.1)._
 
-## Archive API (ERA5 Reanalysis)
+## Archive API (Reanalysis Blend)
 
 ### Known Limitations
 - Recent data (last 5-7 days) may have gaps until ERA5 processing catches up
-- Spatial resolution ~9km — not suitable for field-level analysis
+- The default is Open-Meteo's Best Match blend of ECMWF IFS, ERA5 and ERA5-Land,
+  not pure ERA5; pass `model=` to `get_historical_weather` to pin one dataset
+- Spatial resolution ~25km for ERA5, ~11km for ERA5-Land and 9km for ECMWF IFS
+  — not suitable for field-level analysis
 - Soil moisture is modeled, not measured — ground-truth validation needed
 
 ### Findings
@@ -72,7 +75,8 @@ _Observed on 2026-07-28 UTC by executing `notebooks/01-open-meteo-exploration.ip
   Agreement between served temperature levels and reanalysis is therefore
   expected, and is not evidence of model skill. The correction assumes that
   each model's bias stays constant in the future.
-- Resolution ~25km — coarser than ERA5
+- Served at ~10km after downscaling, from native model grids of ~20–50km —
+  regional averages only
 - Projections carry inherent uncertainty — always report model ranges (the
   client's default is now three models for exactly this reason)
 

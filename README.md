@@ -14,7 +14,7 @@ Climate change is reshaping agriculture globally. Understanding historical patte
 and deviations from the [original PRD](docs/prd/phase1-foundation.md) are
 recorded in [docs/architecture.md](docs/architecture.md).
 
-- [x] Open-Meteo Archive API integration (historical ERA5 reanalysis) — validated against the live API
+- [x] Open-Meteo Archive API integration (historical reanalysis) — validated against the live API
 - [x] Open-Meteo Climate API integration (CMIP6 projections) — validated against the live API, multi-model parsing included
 - [x] Open-Meteo Forecast API integration — client ready, mock-tested
 - [x] Data quality assessment for Pampa (AR) and Midwest (US) — see [docs/data-quality-report.md](docs/data-quality-report.md)
@@ -48,7 +48,7 @@ Requires Python 3.12+ and [uv](https://docs.astral.sh/uv/).
 
 Guided walkthroughs with outputs committed — they render directly on GitHub, no execution needed:
 
-- [`01-open-meteo-exploration.ipynb`](notebooks/01-open-meteo-exploration.ipynb) — is open reanalysis data (ERA5) good enough to build agri-risk indicators on?
+- [`01-open-meteo-exploration.ipynb`](notebooks/01-open-meteo-exploration.ipynb) — is open reanalysis data good enough to build agri-risk indicators on?
 - [`02-cmip6-multi-model-projections.ipynb`](notebooks/02-cmip6-multi-model-projections.ipynb) — CMIP6 projections and why one climate model is never enough.
 
 ## Project Structure
@@ -69,8 +69,8 @@ pretaverdi/
 
 | API | Description | Coverage |
 |-----|-------------|----------|
-| [Archive](https://open-meteo.com/en/docs/historical-weather-api) | ERA5 reanalysis (historical) | 1940–present, ~9km resolution |
-| [Climate](https://open-meteo.com/en/docs/climate-api) | CMIP6 projections | 1950–2050, ~25km resolution |
+| [Archive](https://open-meteo.com/en/docs/historical-weather-api) | Historical reanalysis — by default Open-Meteo's Best Match blend of ECMWF IFS, ERA5 and ERA5-Land | 1940–present; ERA5 0.25° (~25 km), ERA5-Land 0.1° (~11 km), IFS 9 km |
+| [Climate](https://open-meteo.com/en/docs/climate-api) | CMIP6 projections | 1950–2050; served downscaled to ~10 km from ~20–50 km native model grids |
 | [Forecast](https://open-meteo.com/en/docs/forecast-api) | Weather forecast | Up to 16 days ahead |
 
 All data is freely available via Open-Meteo's API (no API key required, 10k calls/day free tier).
