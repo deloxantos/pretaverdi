@@ -57,6 +57,17 @@ def test_climate_multimodel_parses_with_model_labels():
     assert not df["temperature_2m_max"].isna().all().any()  # every model has data
 
 
+def test_disabling_bias_correction_changes_the_data():
+    # Mocked tests only see that the flag is sent; this pins that the API
+    # honours it and returns different (raw) values.
+    served = get_climate_projections(-34.6, -58.4, "2030-01-01", "2030-01-10")
+    raw = get_climate_projections(
+        -34.6, -58.4, "2030-01-01", "2030-01-10", disable_bias_correction=True
+    )
+
+    assert not raw["temperature_2m_max"].equals(served["temperature_2m_max"])
+
+
 def test_forecast_smoke():
     df = get_forecast(-34.6, -58.4, forecast_days=1)
 
