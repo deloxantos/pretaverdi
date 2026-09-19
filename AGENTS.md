@@ -36,8 +36,13 @@ All three Open-Meteo endpoints (no API key needed):
 src/pretaverdi/
 ├── client.py      # Thin wrapper: 3 functions (historical, projections, forecast)
 │                  # Each returns a DataFrame, logs metadata to .cache/query_log.jsonl
+├── analysis.py    # Transforms over client frames, plus the experiments that compose them
+├── plots.py       # Figures over analysis frames
 └── variables.py   # Constants: variable lists, API URLs, reference locations
 ```
+
+Layers: `client` fetches → `analysis` transforms → `plots` draws → notebooks only call and show.
+Notebook cells stay small; reusable logic lives in the package, with tests.
 
 ## Conventions
 

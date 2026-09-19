@@ -1,0 +1,281 @@
+"""Tests for the pretaverdi analysis module."""
+
+from unittest.mock import patch
+
+import pandas as pd
+
+from pretaverdi.analysis import (
+    TEMPERATURE_VARIABLES,
+    annual_mean_temperature,
+    hindcast_annual,
+    inter_model_spread,
+    mean_levels,
+)
+
+
+def _daily_frame(means_by_year: dict[int, float], spread: float = 5.0):
+    """Daily tmax/tmin frame whose (tmax + tmin) / 2 is flat within each year."""
+    index = pd.date_range("2020-01-01", "2021-12-31", freq="D", name="date")
+    base = pd.Series([means_by_year[ts.year] for ts in index], index=index)
+    return pd.DataFrame(
+        {"temperature_2m_max": base + spread, "temperature_2m_min": base - spread}
+    )
+
+
+def _multi_model_daily_frame(means_by_model: dict[str, dict[int, float]]):
+    """(variable, model) MultiIndex frame, one daily frame per model."""
+    frames = {model: _daily_frame(means) for model, means in means_by_model.items()}
+    df = pd.concat(frames, axis=1).swaplevel(axis=1)
+    df = df[
+        [(var, model) for var in TEMPERATURE_VARIABLES for model in means_by_model]
+    ]
+    df.columns.names = ["variable", "model"]
+    return df
+
+
+def _hindcast_frame(raw: dict, served: dict, reference: dict, years=(2020, 2021)):
+    """Year-indexed (version, model) frame shaped like hindcast_annual output."""
+    index = pd.Index(years, name="date")
+    frame = pd.concat(
+        {
+            "raw": pd.DataFrame(raw, index=index),
+            "served": pd.DataFrame(served, index=index),
+            "reference": pd.DataFrame(reference, index=index),
+        },
+        axis=1,
+    )
+    frame.columns.names = ["version", "model"]
+    return frame
+
+
+class TestAnnualMeanTemperature:
+    def test_flat_frame_returns_series(self):
+        annual = annual_mean_temperature(_daily_frame({2020: 15.0, 2021: 17.0}))
+
+        assert isinstance(annual, pd.Series)
+
+    def test_flat_frame_averages_max_and_min(self):
+        annual = annual_mean_temperature(_daily_frame({2020: 15.0, 2021: 17.0}))
+
+        assert annual.tolist() == [15.0, 17.0]
+
+    def test_index_is_integer_year(self):
+        annual = annual_mean_temperature(_daily_frame({2020: 15.0, 2021: 17.0}))
+
+        assert annual.index.tolist() == [2020, 2021]
+
+    def test_multimodel_frame_returns_year_by_model_frame(self):
+        annual = annual_mean_temperature(
+            _multi_model_daily_frame(
+                {"A": {2020: 15.0, 2021: 17.0}, "B": {2020: 16.0, 2021: 18.0}}
+            )
+        )
+
+        assert annual.columns.tolist() == ["A", "B"]
+
+    def test_multimodel_frame_averages_each_model(self):
+        annual = annual_mean_temperature(
+            _multi_model_daily_frame(
+                {"A": {2020: 15.0, 2021: 17.0}, "B": {2020: 16.0, 2021: 18.0}}
+            )
+        )
+
+        assert annual["B"].tolist() == [16.0, 18.0]
+
+
+@patch("pretaverdi.analysis.get_historical_weather")
+@patch("pretaverdi.analysis.get_climate_projections")
+class TestHindcastAnnual:
+    location = {"lat": -34.6, "lon": -58.4, "name": "Pampa, Argentina"}
+
+    @staticmethod
+    def _wire(mock_projections, mock_historical):
+        mock_projections.return_value = _multi_model_daily_frame(
+            {"A": {2020: 15.0, 2021: 17.0}, "B": {2020: 16.0, 2021: 18.0}}
+        )
+        mock_historical.return_value = _daily_frame({2020: 14.0, 2021: 16.0})
+
+    def test_columns_cover_both_versions_and_the_reference(
+        self, mock_projections, mock_historical
+    ):
+        self._wire(mock_projections, mock_historical)
+
+        annual = hindcast_annual(self.location)
+
+        assert annual.columns.tolist() == [
+            ("raw", "A"),
+            ("raw", "B"),
+            ("served", "A"),
+            ("served", "B"),
+            ("reference", "era5_land"),
+        ]
+
+    def test_column_levels_are_named(self, mock_projections, mock_historical):
+        self._wire(mock_projections, mock_historical)
+
+        annual = hindcast_annual(self.location)
+
+        assert list(annual.columns.names) == ["version", "model"]
+
+    def test_index_is_integer_year(self, mock_projections, mock_historical):
+        self._wire(mock_projections, mock_historical)
+
+        annual = hindcast_annual(self.location)
+
+        assert annual.index.tolist() == [2020, 2021]
+
+    def test_one_projection_fetch_disables_bias_correction(
+        self, mock_projections, mock_historical
+    ):
+        self._wire(mock_projections, mock_historical)
+
+        hindcast_annual(self.location)
+
+        flags = [
+            call.kwargs.get("disable_bias_correction", False)
+            for call in mock_projections.call_args_list
+        ]
+        assert sorted(flags) == [False, True]
+
+    def test_reference_defaults_to_era5_land(
+        self, mock_projections, mock_historical
+    ):
+        self._wire(mock_projections, mock_historical)
+
+        hindcast_annual(self.location)
+
+        assert mock_historical.call_args.kwargs["model"] == "era5_land"
+
+    def test_fetches_temperature_variables_only(
+        self, mock_projections, mock_historical
+    ):
+        self._wire(mock_projections, mock_historical)
+
+        hindcast_annual(self.location)
+
+        assert mock_projections.call_args.kwargs["variables"] == TEMPERATURE_VARIABLES
+
+    def test_models_default_to_the_client_default(
+        self, mock_projections, mock_historical
+    ):
+        self._wire(mock_projections, mock_historical)
+
+        hindcast_annual(self.location)
+
+        assert mock_projections.call_args.kwargs["models"] is None
+
+
+class TestMeanLevels:
+    hindcast = _hindcast_frame(
+        raw={"A": [10.0, 12.0], "B": [14.0, 16.0]},
+        served={"A": [11.0, 13.0], "B": [13.0, 15.0]},
+        reference={"era5_land": [12.0, 14.0]},
+    )
+
+    def test_index_lists_the_models(self):
+        levels = mean_levels(self.hindcast)
+
+        assert levels.index.tolist() == ["A", "B"]
+
+    def test_columns_pair_levels_with_deltas(self):
+        levels = mean_levels(self.hindcast)
+
+        assert levels.columns.tolist() == [
+            "raw",
+            "served",
+            "reference",
+            "raw − ref",
+            "served − ref",
+        ]
+
+    def test_levels_are_period_means(self):
+        levels = mean_levels(self.hindcast)
+
+        assert levels["raw"].tolist() == [11.0, 15.0]
+
+    def test_reference_is_shared_by_every_model(self):
+        levels = mean_levels(self.hindcast)
+
+        assert levels["reference"].tolist() == [13.0, 13.0]
+
+    def test_deltas_are_relative_to_the_reference(self):
+        levels = mean_levels(self.hindcast)
+
+        assert levels["served − ref"].tolist() == [-1.0, 1.0]
+
+    def test_values_are_rounded_to_two_decimals(self):
+        hindcast = _hindcast_frame(
+            raw={"A": [10.0, 11.0, 11.0], "B": [14.0, 16.0, 15.0]},
+            served={"A": [11.0, 13.0, 12.0], "B": [13.0, 15.0, 14.0]},
+            reference={"era5_land": [12.0, 14.0, 13.0]},
+            years=(2020, 2021, 2022),
+        )
+
+        levels = mean_levels(hindcast)
+
+        assert levels.loc["A", "raw"] == 10.67
+
+    def test_float32_input_rounds_to_clean_decimals(self):
+        hindcast = _hindcast_frame(
+            raw={"A": [17.64, 17.64], "B": [18.45, 18.45]},
+            served={"A": [17.49, 17.49], "B": [17.64, 17.64]},
+            reference={"era5_land": [17.74, 17.74]},
+        ).astype("float32")
+
+        levels = mean_levels(hindcast)
+
+        assert levels.loc["A", "raw"] == 17.64
+
+
+class TestInterModelSpread:
+    levels = pd.DataFrame(
+        {"raw": [11.0, 15.0], "served": [12.0, 14.0], "reference": [13.0, 13.0]},
+        index=pd.Index(["A", "B"], name="model"),
+    )
+
+    def test_plain_model_index_returns_a_series(self):
+        spread = inter_model_spread(self.levels)
+
+        assert spread.index.tolist() == ["raw", "served"]
+
+    def test_spread_is_max_minus_min_across_models(self):
+        spread = inter_model_spread(self.levels)
+
+        assert spread["raw"] == 4.0
+
+    def test_site_index_returns_one_row_per_site(self):
+        stacked = pd.concat(
+            {"pampa_ar": self.levels, "kenya_ea": self.levels}, names=["site"]
+        )
+
+        spread = inter_model_spread(stacked)
+
+        assert spread.index.tolist() == ["pampa_ar", "kenya_ea"]
+
+    def test_site_rows_carry_both_versions(self):
+        stacked = pd.concat(
+            {"pampa_ar": self.levels, "kenya_ea": self.levels}, names=["site"]
+        )
+
+        spread = inter_model_spread(stacked)
+
+        assert spread.columns.tolist() == ["raw", "served"]
+
+    def test_site_spread_is_computed_within_each_site(self):
+        stacked = pd.concat(
+            {"pampa_ar": self.levels, "kenya_ea": self.levels * 2}, names=["site"]
+        )
+
+        spread = inter_model_spread(stacked)
+
+        assert spread.loc["kenya_ea", "raw"] == 8.0
+
+    def test_values_are_rounded_to_two_decimals(self):
+        levels = pd.DataFrame(
+            {"raw": [10.0, 10.0 + 1 / 3], "served": [12.0, 14.0]},
+            index=pd.Index(["A", "B"], name="model"),
+        )
+
+        spread = inter_model_spread(levels)
+
+        assert spread["raw"] == 0.33
