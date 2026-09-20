@@ -20,7 +20,9 @@ _MARKERS = ["o", "s", "^"]
 
 
 def plot_bias(
-    levels: pd.DataFrame, reference_label: str = "ERA5-Land (reference)"
+    levels: pd.DataFrame,
+    reference_label: str = "ERA5-Land (reference)",
+    title: str | None = None,
 ) -> plt.Figure:
     """Plot each model's bias before and after correction, one axis per site.
 
@@ -28,6 +30,8 @@ def plot_bias(
         levels: `mean_levels` frames stacked by site with
             `pd.concat({...}, names=["site"])`.
         reference_label: Legend label for the zero line.
+        title: Figure-level title; a sentence that states the conclusion.
+            None draws no suptitle.
 
     Returns:
         The Figure, unshown, so the caller decides where it goes.
@@ -47,9 +51,11 @@ def plot_bias(
         ax.axhline(0, color="black", linestyle="--", linewidth=1.8, label=reference_label)
         ax.set_xticks(x, bias.index)
         ax.margins(x=0.25, y=0.15)
-        ax.set_title(f"Model bias — {site}")
+        ax.set_title(site)
 
     axes[0][0].set_ylabel("Difference from reference (°C)")
+    if title is not None:
+        fig.suptitle(title)
     # One shared legend below the axes: it can never sit on top of a data point.
     handles, labels = axes[0][0].get_legend_handles_labels()
     fig.legend(handles, labels, loc="outside lower center", ncols=3, fontsize=9)
@@ -61,6 +67,7 @@ def plot_model_spread(
     ylabel: str,
     title: str,
     divider_year: float | None = None,
+    year_notes: dict[float, str] | None = None,
 ) -> plt.Figure:
     """Plot each model's trajectory and the inter-model range, one axis per site.
 
@@ -69,10 +76,16 @@ def plot_model_spread(
             built by the caller with
             `pd.concat({site: annual_frame, ...}, axis=1, names=["site"])`.
         ylabel: Y-axis label, shown on every axis.
-        title: Title prefix; each axis reads f"{title} — {site}".
+        title: Figure-level title; a sentence that states the conclusion.
         divider_year: Where to draw the divider: years to its left overlap
             the reanalysis record, years to its right are projection only.
-            None skips the divider.
+            Drawn as a dashed line with a label at the bottom, on every
+            axis. None skips the divider.
+        year_notes: Year to short label, for years where a data gap would
+            otherwise look like a plotting error — not the same thing as
+            `divider_year`, which marks a boundary in the data's meaning
+            rather than a gap in it. Drawn as thin dotted lines with a
+            label at the top, on every axis. None skips the notes.
 
     Returns:
         The Figure, unshown, so the caller decides where it goes.
@@ -103,7 +116,7 @@ def plot_model_spread(
                 linestyle=_LINESTYLES[position % len(_LINESTYLES)],
                 label=model,
             )
-        ax.set_title(f"{title} — {site}")
+        ax.set_title(site)
         ax.set_ylabel(ylabel)
         if divider_year is not None:
             ax.axvline(divider_year, color="gray", linestyle="--", linewidth=1)
@@ -115,7 +128,21 @@ def plot_model_spread(
                 color="#555",
                 va="bottom",
             )
+        if year_notes is not None:
+            for year, text in year_notes.items():
+                ax.axvline(year, color="0.6", linestyle=":", linewidth=0.8)
+                ax.annotate(
+                    text,
+                    xy=(year, 0.98),
+                    xycoords=("data", "axes fraction"),
+                    fontsize=9,
+                    color="#555",
+                    va="top",
+                    rotation=90,
+                    ha="right",
+                )
 
+    fig.suptitle(title)
     # One shared legend below the axes: it can never sit on top of a data point.
     handles, labels = axes[0, 0].get_legend_handles_labels()
     fig.legend(handles, labels, loc="outside lower center", ncols=4, fontsize=9)

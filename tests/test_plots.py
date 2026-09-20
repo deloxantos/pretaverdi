@@ -46,7 +46,7 @@ def test_one_axis_per_site():
 def test_axis_title_names_the_site():
     fig = plot_bias(_levels_frame())
 
-    assert fig.axes[0].get_title() == "Model bias — Pampa"
+    assert fig.axes[0].get_title() == "Pampa"
 
 
 def test_x_axis_lists_the_models():
@@ -69,6 +69,18 @@ def test_reference_label_is_configurable():
     fig = plot_bias(_levels_frame(), reference_label="ERA5 (reference)")
 
     assert _legend_labels(fig)[-1] == "ERA5 (reference)"
+
+
+def test_title_becomes_the_suptitle():
+    fig = plot_bias(_levels_frame(), title="Bias correction pulls models toward ERA5")
+
+    assert fig.get_suptitle() == "Bias correction pulls models toward ERA5"
+
+
+def test_no_suptitle_when_title_is_none():
+    fig = plot_bias(_levels_frame())
+
+    assert fig.get_suptitle() == ""
 
 
 def _spread_frame(sites=("Pampa", "Kenya"), models=("A", "B", "C")):
@@ -137,6 +149,38 @@ class TestPlotModelSpread:
         fig = plot_model_spread(frame, "°C", "Model spread")
 
         assert np.isnan(fig.axes[0].get_lines()[0].get_ydata()[1])
+
+    def test_suptitle_is_the_title(self):
+        fig = plot_model_spread(_spread_frame(), "°C", "Models diverge after 2030")
+
+        assert fig.get_suptitle() == "Models diverge after 2030"
+
+    def test_axis_title_is_just_the_site(self):
+        fig = plot_model_spread(_spread_frame(), "°C", "Model spread")
+
+        assert fig.axes[0].get_title() == "Pampa"
+
+    def test_year_notes_draw_one_line_per_axis_per_year(self):
+        fig = plot_model_spread(
+            _spread_frame(), "°C", "Model spread", year_notes={2021: "sensor outage"}
+        )
+
+        assert all(
+            any(list(line.get_xdata()) == [2021, 2021] for line in ax.get_lines())
+            for ax in fig.axes
+        )
+
+    def test_year_notes_label_text_is_drawn(self):
+        fig = plot_model_spread(
+            _spread_frame(), "°C", "Model spread", year_notes={2021: "sensor outage"}
+        )
+
+        assert fig.axes[0].texts[0].get_text() == "sensor outage"
+
+    def test_year_notes_omitted_when_none(self):
+        fig = plot_model_spread(_spread_frame(), "°C", "Model spread", year_notes=None)
+
+        assert len(fig.axes[0].texts) == 0
 
 
 def _decadal_change_frame():
