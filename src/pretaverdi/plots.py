@@ -14,6 +14,10 @@ _VERSIONS = [
 # styles, so models stay distinguishable without relying on colour.
 _LINESTYLES = ["-", "--", "-."]
 
+# Fixed per model-position marker shape, cycled the same way as _LINESTYLES,
+# for plots where models are points rather than trajectories.
+_MARKERS = ["o", "s", "^"]
+
 
 def plot_bias(
     levels: pd.DataFrame, reference_label: str = "ERA5-Land (reference)"
@@ -115,4 +119,115 @@ def plot_model_spread(
     # One shared legend below the axes: it can never sit on top of a data point.
     handles, labels = axes[0, 0].get_legend_handles_labels()
     fig.legend(handles, labels, loc="outside lower center", ncols=4, fontsize=9)
+    return fig
+
+
+def _row_offsets(n_models: int) -> list[float]:
+    """Deterministic vertical offsets so models sharing a rounded change stay visible.
+
+    Args:
+        n_models: Number of models to offset.
+
+    Returns:
+        One offset per model, evenly spaced within ±0.12, centred on 0.
+    """
+    if n_models <= 1:
+        return [0.0] * n_models
+    step = 0.24 / (n_models - 1)
+    return [-0.12 + position * step for position in range(n_models)]
+
+
+def plot_decadal_change(
+    changes: pd.DataFrame, title: str, xlabel: str | None = None, sharex: bool = False
+) -> plt.Figure:
+    """Plot per-model decadal change as a forest plot: do models agree on the sign?
+
+    Each row shows every model's change as a point on a shared axis, with a
+    grey range bar and a black ensemble-mean tick. The zero line is the sign
+    boundary: when a row's markers straddle it, the models disagree on
+    whether the quantity increases or decreases, not just by how much.
+
+    Args:
+        changes: Rows are a 2-level (panel, row) MultiIndex, built by the
+            caller with `pd.concat({"panel label": frame, ...})`; columns
+            are what `analysis.decadal_change` returns for stacked sites:
+            one column per model, then "mean" and "spread". Panels and rows
+            keep the order given.
+        title: Figure-level title; a sentence that states the conclusion.
+        xlabel: X-axis label, set on every axis when given. Left as None
+            when panels mix units — each panel then states its own unit in
+            its title instead.
+        sharex: Whether the panel axes share their x-axis. False by default,
+            since panels commonly mix units.
+
+    Returns:
+        The Figure, unshown, so the caller decides where it goes.
+    """
+    panels = changes.index.get_level_values(0).unique()
+    models = [column for column in changes.columns if column not in ("mean", "spread")]
+    max_rows = changes.groupby(level=0, sort=False).size().max()
+
+    fig, axes = plt.subplots(
+        1,
+        len(panels),
+        figsize=(14, 1.6 + 0.9 * max_rows),
+        layout="constrained",
+        squeeze=False,
+        sharex=sharex,
+        sharey=False,
+    )
+    offsets = _row_offsets(len(models))
+    for ax, panel in zip(axes[0], panels):
+        panel_frame = changes.xs(panel, level=0, drop_level=True)
+        positions = range(len(panel_frame))
+        ax.set_yticks(list(positions), panel_frame.index.tolist())
+        ax.invert_yaxis()
+
+        for row_position, (_, row) in zip(positions, panel_frame.iterrows()):
+            model_values = row[models]
+            ax.plot(
+                [model_values.min(), model_values.max()],
+                [row_position, row_position],
+                color="0.6",
+                linewidth=3,
+                alpha=0.6,
+                zorder=1,
+                label="Model range" if row_position == 0 else None,
+            )
+            for model_position, model in enumerate(models):
+                ax.plot(
+                    row[model],
+                    row_position + offsets[model_position],
+                    color=f"C{model_position}",
+                    marker=_MARKERS[model_position % len(_MARKERS)],
+                    markersize=9,
+                    zorder=3,
+                    label=model,
+                )
+            ax.plot(
+                row["mean"],
+                row_position,
+                color="black",
+                marker="|",
+                markersize=18,
+                markeredgewidth=2,
+                linestyle="none",
+                zorder=4,
+                label="Ensemble mean",
+            )
+
+        ax.axvline(0, color="black", linestyle="--", linewidth=1)
+        ax.margins(y=0.35)
+        ax.set_title(panel)
+        if xlabel is not None:
+            ax.set_xlabel(xlabel)
+
+    fig.suptitle(title)
+    # One shared legend, de-duplicated: every row repeats the model and
+    # ensemble-mean labels, but the legend should list each once.
+    handles, labels = axes[0, 0].get_legend_handles_labels()
+    by_label = dict(zip(labels, handles))
+    fig.legend(
+        by_label.values(), by_label.keys(), loc="outside lower center", ncols=5, fontsize=9
+    )
     return fig
