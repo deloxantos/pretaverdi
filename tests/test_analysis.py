@@ -7,6 +7,7 @@ import pandas as pd
 from pretaverdi.analysis import (
     TEMPERATURE_VARIABLES,
     annual_mean_temperature,
+    annual_precipitation,
     hindcast_annual,
     inter_model_spread,
     mean_levels,
@@ -29,6 +30,20 @@ def _multi_model_daily_frame(means_by_model: dict[str, dict[int, float]]):
     df = df[
         [(var, model) for var in TEMPERATURE_VARIABLES for model in means_by_model]
     ]
+    df.columns.names = ["variable", "model"]
+    return df
+
+
+def _precip_frame(values: list[float], start: str = "2020-01-01") -> pd.DataFrame:
+    """Daily precipitation_sum frame, one row per value starting at `start`."""
+    index = pd.date_range(start, periods=len(values), freq="D", name="date")
+    return pd.DataFrame({"precipitation_sum": values}, index=index)
+
+
+def _multi_model_precip_frame(values_by_model: dict[str, list[float]]):
+    """(variable, model) MultiIndex precipitation frame, one series per model."""
+    frames = {model: _precip_frame(values) for model, values in values_by_model.items()}
+    df = pd.concat(frames, axis=1).swaplevel(axis=1)
     df.columns.names = ["variable", "model"]
     return df
 
@@ -81,6 +96,58 @@ class TestAnnualMeanTemperature:
         )
 
         assert annual["B"].tolist() == [16.0, 18.0]
+
+
+class TestAnnualPrecipitation:
+    def test_full_year_sums_precipitation(self):
+        annual = annual_precipitation(_precip_frame([1.0] * 366, start="2020-01-01"))
+
+        assert annual.loc[2020] == 366.0
+
+    def test_year_below_min_valid_days_becomes_nan(self):
+        annual = annual_precipitation(_precip_frame([5.0] * 100, start="2020-01-01"))
+
+        assert pd.isna(annual.loc[2020])
+
+    def test_year_below_floor_becomes_nan(self):
+        annual = annual_precipitation(_precip_frame([0.5] * 366, start="2020-01-01"))
+
+        assert pd.isna(annual.loc[2020])
+
+    def test_floor_none_keeps_low_totals(self):
+        annual = annual_precipitation(
+            _precip_frame([0.5] * 366, start="2020-01-01"), floor_mm=None
+        )
+
+        assert annual.loc[2020] == 183.0
+
+    def test_all_nan_year_with_min_valid_days_zero_returns_zero(self):
+        annual = annual_precipitation(
+            _precip_frame([float("nan")] * 366, start="2020-01-01"),
+            min_valid_days=0,
+            floor_mm=None,
+        )
+
+        assert annual.loc[2020] == 0.0
+
+    def test_index_is_integer_year(self):
+        df = pd.concat(
+            [
+                _precip_frame([1.0] * 366, start="2020-01-01"),
+                _precip_frame([1.0] * 365, start="2021-01-01"),
+            ]
+        )
+
+        annual = annual_precipitation(df)
+
+        assert annual.index.tolist() == [2020, 2021]
+
+    def test_multimodel_frame_returns_year_by_model_frame(self):
+        annual = annual_precipitation(
+            _multi_model_precip_frame({"A": [1.0] * 366, "B": [2.0] * 366})
+        )
+
+        assert annual.columns.tolist() == ["A", "B"]
 
 
 @patch("pretaverdi.analysis.get_historical_weather")

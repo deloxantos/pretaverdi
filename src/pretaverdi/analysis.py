@@ -26,6 +26,38 @@ def annual_mean_temperature(df: pd.DataFrame) -> pd.Series | pd.DataFrame:
     return annual
 
 
+def annual_precipitation(
+    df: pd.DataFrame,
+    min_valid_days: int = 300,
+    floor_mm: float | None = 300.0,
+) -> pd.Series | pd.DataFrame:
+    """Reduce a daily precipitation frame to annual totals, masking bad years.
+
+    A partial year is not a total, so years with fewer than `min_valid_days`
+    valid days are NaN. Some sites also log zero-precipitation days that are
+    missing data stored as zeros, not weather — `floor_mm` masks annual
+    totals implausibly low to catch that.
+
+    Args:
+        df: Date-indexed frame with a "precipitation_sum" column, flat or
+            with the (variable, model) MultiIndex columns of a multi-model
+            fetch.
+        min_valid_days: Minimum number of valid daily values a year needs to
+            report a total; short of that the year is NaN.
+        floor_mm: Minimum plausible annual total; years below it become NaN.
+            None skips this check and returns the raw totals.
+
+    Returns:
+        Year-indexed Series for a flat frame; year × model DataFrame for a
+        MultiIndex one.
+    """
+    annual = df["precipitation_sum"].resample("YE").sum(min_count=min_valid_days)
+    annual.index = annual.index.year
+    if floor_mm is not None:
+        annual = annual.mask(annual < floor_mm)
+    return annual
+
+
 def hindcast_annual(
     location: dict,
     start_date: str = "2015-01-01",
