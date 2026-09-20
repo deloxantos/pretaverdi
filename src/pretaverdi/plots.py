@@ -85,7 +85,7 @@ def plot_model_spread(
             otherwise look like a plotting error — not the same thing as
             `divider_year`, which marks a boundary in the data's meaning
             rather than a gap in it. Drawn as thin dotted lines with a
-            label at the top, on every axis. None skips the notes.
+            label above the frame, on every axis. None skips the notes.
 
     Returns:
         The Figure, unshown, so the caller decides where it goes.
@@ -129,17 +129,19 @@ def plot_model_spread(
                 va="bottom",
             )
         if year_notes is not None:
+            middle = (site_frame.index.min() + site_frame.index.max()) / 2
             for year, text in year_notes.items():
                 ax.axvline(year, color="0.6", linestyle=":", linewidth=0.8)
+                # Above the frame, so a label never covers data; aligned
+                # towards the centre, so one near an edge is not clipped.
                 ax.annotate(
                     text,
-                    xy=(year, 0.98),
+                    xy=(year, 1.01),
                     xycoords=("data", "axes fraction"),
                     fontsize=9,
                     color="#555",
-                    va="top",
-                    rotation=90,
-                    ha="right",
+                    va="bottom",
+                    ha="left" if year < middle else "right",
                 )
 
     fig.suptitle(title)
@@ -228,6 +230,7 @@ def plot_decadal_change(
                     color=f"C{model_position}",
                     marker=_MARKERS[model_position % len(_MARKERS)],
                     markersize=9,
+                    linestyle="none",
                     zorder=3,
                     label=model,
                 )

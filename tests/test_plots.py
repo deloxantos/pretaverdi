@@ -182,6 +182,13 @@ class TestPlotModelSpread:
 
         assert len(fig.axes[0].texts) == 0
 
+    def test_year_notes_sit_above_the_axis_frame(self):
+        fig = plot_model_spread(
+            _spread_frame(), "°C", "Model spread", year_notes={2021: "sensor outage"}
+        )
+
+        assert fig.axes[0].texts[0].xy[1] >= 1.0
+
 
 def _decadal_change_frame():
     """Two-panel two-row (panel, row) frame shaped like stacked decadal_change output."""
@@ -255,6 +262,14 @@ class TestPlotDecadalChange:
             for model in ("A", "B", "C")
         ]
         assert markers_by_model == [{marker} for marker in _MARKERS]
+
+    def test_model_markers_have_no_connecting_line(self):
+        fig = plot_decadal_change(_decadal_change_frame(), "Models agree on warming")
+
+        linestyles = {
+            line.get_linestyle() for line in fig.axes[0].get_lines() if line.get_label() == "A"
+        }
+        assert linestyles == {"None"}
 
     def test_equal_changes_do_not_overlap(self):
         row = pd.DataFrame(
