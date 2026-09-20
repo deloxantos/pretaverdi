@@ -11,6 +11,7 @@ from pretaverdi.analysis import (
     hindcast_annual,
     inter_model_spread,
     mean_levels,
+    nan_share,
 )
 
 
@@ -346,3 +347,40 @@ class TestInterModelSpread:
         spread = inter_model_spread(levels)
 
         assert spread["raw"] == 0.33
+
+
+class TestNanShare:
+    def test_values_are_percentages(self):
+        df = pd.DataFrame({"a": [1.0, None, 3.0, None]})
+
+        share = nan_share(df)
+
+        assert share["a"] == 50.0
+
+    def test_fully_missing_column_is_100(self):
+        df = pd.DataFrame({"a": [None, None, None]})
+
+        share = nan_share(df)
+
+        assert share["a"] == 100.0
+
+    def test_values_rounded_to_one_decimal(self):
+        df = pd.DataFrame({"a": [1.0, None, 3.0]})
+
+        share = nan_share(df)
+
+        assert share["a"] == 33.3
+
+    def test_index_keeps_variable_and_model_names(self):
+        df = _multi_model_precip_frame({"A": [1.0, 2.0], "B": [float("nan"), 3.0]})
+
+        share = nan_share(df)
+
+        assert share.index.names == ["variable", "model"]
+
+    def test_series_is_named_percent_nan(self):
+        df = pd.DataFrame({"a": [1.0, None]})
+
+        share = nan_share(df)
+
+        assert share.name == "% NaN"

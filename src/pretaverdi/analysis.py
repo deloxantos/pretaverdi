@@ -142,6 +142,40 @@ def mean_levels(annual: pd.DataFrame) -> pd.DataFrame:
     return levels.round(2)
 
 
+def _rounded(values: pd.Series | pd.DataFrame, decimals: int) -> pd.Series | pd.DataFrame:
+    """Round after widening to float64.
+
+    The SDK delivers float32, and rounding float32 prints values like
+    17.639999 instead of 17.64 — widen first so the rounding is clean.
+
+    Args:
+        values: Series or DataFrame to round.
+        decimals: Number of decimal places to keep.
+
+    Returns:
+        Same shape as `values`, rounded.
+    """
+    return values.astype(float).round(decimals)
+
+
+def nan_share(df: pd.DataFrame) -> pd.Series:
+    """Share of missing values per column of one frame, in percent.
+
+    Per column rather than per frame: in multi-model data each model is its
+    own dataset, so a whole-frame share would hide a model that lacks a
+    variable or a year behind the others' complete data.
+
+    Args:
+        df: Frame to check, flat or with (variable, model) MultiIndex
+            columns.
+
+    Returns:
+        Column-indexed Series of missing shares, rounded to 1 decimal and
+        named "% NaN".
+    """
+    return _rounded(df.isna().mean() * 100, 1).rename("% NaN")
+
+
 def inter_model_spread(levels: pd.DataFrame) -> pd.Series | pd.DataFrame:
     """Measure how far apart the models sit, before and after bias correction.
 
