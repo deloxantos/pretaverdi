@@ -19,8 +19,9 @@ exact parameters each spec needs).
 the next phase. Geographic scope also widened from the PRD's southern Brazil focus
 to four reference regions (Pampa, Midwest, Punjab, Central Kenya); only the two
 western-hemisphere ones are explored so far. The Climate API integration also
-remains partial: multi-model response parsing is deferred (see
-`docs/data-quality-report.md`, Climate API "Known Limitations").
+remained partial at the time: multi-model response parsing was deferred.
+_Update 2026-08-31: multi-model parsing landed; the Climate API integration is
+no longer partial (see `docs/data-quality-report.md`, Climate API "Findings")._
 
 ## ADR-002: NASA POWER deferred to the next phase
 

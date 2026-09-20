@@ -10,9 +10,9 @@ Technical evaluation of Open-Meteo as a data source for agri-climate risk assess
 
 ### 1. Archive API (Historical Weather)
 - **URL**: `https://archive-api.open-meteo.com/v1/archive`
-- **Source**: ERA5 reanalysis (ECMWF)
+- **Source**: Open-Meteo's Best Match blend of ECMWF IFS, ERA5 and ERA5-Land (default; `models=` pins one dataset)
 - **Coverage**: 1940–present
-- **Resolution**: ~9km (0.25°)
+- **Resolution**: ERA5 0.25° (~25 km), ERA5-Land 0.1° (~11 km), ECMWF IFS 9 km
 - **Latency**: Near real-time, with 5-7 day processing delay for latest data
 - **Agri variables**: Temperature, precipitation, ET₀, soil moisture, radiation
 
@@ -20,7 +20,7 @@ Technical evaluation of Open-Meteo as a data source for agri-climate risk assess
 - **URL**: `https://climate-api.open-meteo.com/v1/climate`
 - **Source**: CMIP6 model ensemble
 - **Coverage**: 1950–2050 (some models to 2100)
-- **Resolution**: ~25km
+- **Resolution**: served downscaled to ~10 km (ERA5-Land reference); native model grids ~20–50 km
 - **Soil moisture models**: Only EC_Earth3P_HR and MRI_AGCM3_2_S
 - **Agri variables**: Temperature, precipitation, soil moisture (limited models)
 
@@ -56,7 +56,7 @@ Using `openmeteo-requests` Python SDK (v1.3+):
 - CMIP6 soil moisture limited to 2 models
 - No crop-specific data (growing degree days must be computed)
 - No pest/disease risk indicators
-- 9-25km resolution too coarse for field-level decisions
+- 9-25km grid spacing too coarse for field-level decisions
 
 ## Verdict
 

@@ -9,7 +9,8 @@ Agri-climate risk assessment tool. Phase 1 focuses on understanding Open-Meteo c
 ```bash
 uv sync                          # Install dependencies
 uv sync --all-extras             # Install with dev dependencies (pytest, ruff)
-uv run pytest tests/             # Run tests
+uv run pytest tests/             # Run tests (mocked; live tests deselected)
+uv run pytest -m live            # Opt-in smoke tests against the real API
 uv run ruff check .              # Lint (same command as CI)
 uv run jupyter lab               # Launch notebooks
 ```
@@ -35,13 +36,20 @@ All three Open-Meteo endpoints (no API key needed):
 src/pretaverdi/
 ├── client.py      # Thin wrapper: 3 functions (historical, projections, forecast)
 │                  # Each returns a DataFrame, logs metadata to .cache/query_log.jsonl
+├── analysis.py    # Transforms over client frames, plus the experiments that compose them
+├── plots.py       # Figures over analysis frames
 └── variables.py   # Constants: variable lists, API URLs, reference locations
 ```
+
+Layers: `client` fetches → `analysis` transforms → `plots` draws → notebooks only call and show.
+Notebook cells stay small; reusable logic lives in the package, with tests.
 
 ## Conventions
 
 - Query metadata is logged to `.cache/query_log.jsonl` (append mode, gitignored)
 - API responses are cached in `.cache/open_meteo_cache.sqlite` (1h TTL)
 - Notebooks end with a Findings & Limitations section
-- Tests mock the SDK — no real API calls in tests
+- Notebook outputs are committed; GitHub rendering is the portfolio artifact. Always Restart & Run All (or `uv run jupyter nbconvert --to notebook --execute --inplace <nb>`) before committing so outputs match code
+- `docs/data-quality-report.md` is the canonical quality record; notebooks are the narrative walkthrough — each cross-links the other
+- Unit tests mock the SDK; a small opt-in live suite (`uv run pytest -m live`) hits the real API. CI runs mocked tests only
 - Cache and query log live in `<repo-root>/.cache/` regardless of cwd; override with `PRETAVERDI_CACHE_DIR`

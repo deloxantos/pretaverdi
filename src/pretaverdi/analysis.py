@@ -1,0 +1,243 @@
+"""Transforms over client frames, plus the experiments that compose them."""
+
+import pandas as pd
+
+from pretaverdi.client import get_climate_projections, get_historical_weather
+
+# Daily mean temperature needs both ends of the day; nothing else is fetched
+# for the hindcast, so the requests stay small and the frames stay readable.
+TEMPERATURE_VARIABLES = ["temperature_2m_max", "temperature_2m_min"]
+
+
+def annual_mean_temperature(df: pd.DataFrame) -> pd.Series | pd.DataFrame:
+    """Reduce a daily tmax/tmin frame to annual mean temperature.
+
+    Args:
+        df: Date-indexed frame with flat variable columns, or with the
+            (variable, model) MultiIndex columns of a multi-model fetch.
+
+    Returns:
+        Year-indexed Series for a flat frame; year × model DataFrame for a
+        MultiIndex one.
+    """
+    tmean = (df["temperature_2m_max"] + df["temperature_2m_min"]) / 2
+    annual = tmean.resample("YE").mean()
+    annual.index = annual.index.year
+    return annual
+
+
+def annual_precipitation(
+    df: pd.DataFrame,
+    min_valid_days: int = 300,
+    floor_mm: float | None = 300.0,
+) -> pd.Series | pd.DataFrame:
+    """Reduce a daily precipitation frame to annual totals, masking bad years.
+
+    A partial year is not a total, so years with fewer than `min_valid_days`
+    valid days are NaN. Some model years store missing data as zeros, which
+    no NaN check can see — `floor_mm` masks annual totals that are too low
+    to be weather.
+
+    Args:
+        df: Date-indexed frame with a "precipitation_sum" column, flat or
+            with the (variable, model) MultiIndex columns of a multi-model
+            fetch.
+        min_valid_days: Minimum number of valid daily values a year needs to
+            report a total; short of that the year is NaN.
+        floor_mm: Minimum plausible annual total; years below it become NaN.
+            None skips this check and returns the raw totals.
+
+    Returns:
+        Year-indexed Series for a flat frame; year × model DataFrame for a
+        MultiIndex one.
+    """
+    annual = df["precipitation_sum"].resample("YE").sum(min_count=min_valid_days)
+    annual.index = annual.index.year
+    if floor_mm is not None:
+        annual = annual.mask(annual < floor_mm)
+    return annual
+
+
+def decadal_change(
+    annual: pd.DataFrame,
+    early: tuple[int, int] = (2015, 2024),
+    late: tuple[int, int] = (2041, 2050),
+) -> pd.Series | pd.DataFrame:
+    """Per-model change in a climate variable between an early and a late decade.
+
+    The per-model change is the signal: how much each model's projection
+    shifts between the two windows. The spread is the structural
+    disagreement between models — how far apart their changes are, not how
+    uncertain any single model is.
+
+    Args:
+        annual: Year-indexed frame with one column per model, as returned by
+            `annual_mean_temperature` or `annual_precipitation`, or the same
+            shape stacked by site with `pd.concat({site: annual_frame, ...},
+            axis=1, names=["site"])`.
+        early: Inclusive (start, end) years for the baseline window.
+        late: Inclusive (start, end) years for the future window.
+
+    Returns:
+        Series indexed by model name, followed by "mean" and "spread", all
+        rounded to 1 decimal, for a single-site frame; DataFrame with one
+        row per site, in the order given, and those same columns, for a
+        stacked frame.
+    """
+    if annual.columns.nlevels > 1:
+        # Same single-site path, once per site, so the per-model rounding is
+        # identical to calling decadal_change site by site — no groupby.
+        sites = annual.columns.get_level_values(0).unique()
+        rows = [decadal_change(annual[site], early, late) for site in sites]
+        result = pd.DataFrame(rows, index=sites)
+        result.index.name = annual.columns.names[0]
+        return result
+
+    early_mean = annual.loc[(annual.index >= early[0]) & (annual.index <= early[1])].mean()
+    late_mean = annual.loc[(annual.index >= late[0]) & (annual.index <= late[1])].mean()
+    change = _rounded(late_mean - early_mean, 1)
+
+    # "mean" and "spread" are derived from the already-rounded per-model
+    # changes, not the raw ones, so the displayed table is self-consistent:
+    # spread equals max minus min of the values actually shown.
+    summary = pd.Series(
+        {"mean": _rounded(change.mean(), 1), "spread": _rounded(change.max() - change.min(), 1)}
+    )
+    return pd.concat([change, summary])
+
+
+def hindcast_annual(
+    location: dict,
+    start_date: str = "2015-01-01",
+    end_date: str = "2024-12-31",
+    models: list[str] | None = None,
+    reference: str = "era5_land",
+) -> pd.DataFrame:
+    """Fetch the annual temperature a hindcast compares: models vs reanalysis.
+
+    Fetches the same past period three times: the projections as Open-Meteo
+    serves them (bias-corrected against ERA5-Land), the raw model output, and
+    the reanalysis used as the reference. Comparing the three shows how much
+    of the agreement with the reference comes from the correction.
+
+    Args:
+        location: A LOCATIONS-style mapping with `lat` and `lon`.
+        start_date: Start date in YYYY-MM-DD format.
+        end_date: End date in YYYY-MM-DD format.
+        models: List of CMIP6 model names. Defaults to the client's default.
+        reference: Archive API reanalysis dataset to compare against.
+
+    Returns:
+        Year-indexed DataFrame with (version, model) columns: one pair per
+        model for "raw" and "served", plus a single "reference" column.
+    """
+    lat, lon = location["lat"], location["lon"]
+    fetched = {
+        "raw": get_climate_projections(
+            lat,
+            lon,
+            start_date,
+            end_date,
+            models=models,
+            variables=TEMPERATURE_VARIABLES,
+            disable_bias_correction=True,
+        ),
+        "served": get_climate_projections(
+            lat,
+            lon,
+            start_date,
+            end_date,
+            models=models,
+            variables=TEMPERATURE_VARIABLES,
+        ),
+    }
+    annual = {version: annual_mean_temperature(df) for version, df in fetched.items()}
+    # The reanalysis has no model dimension; name its column after the dataset
+    # so the second column level stays meaningful across all three versions.
+    annual["reference"] = annual_mean_temperature(
+        get_historical_weather(
+            lat,
+            lon,
+            start_date,
+            end_date,
+            variables=TEMPERATURE_VARIABLES,
+            model=reference,
+        )
+    ).to_frame(reference)
+
+    hindcast = pd.concat(annual, axis=1)
+    hindcast.columns.names = ["version", "model"]
+    return hindcast
+
+
+def mean_levels(annual: pd.DataFrame) -> pd.DataFrame:
+    """Collapse a hindcast frame to one period-mean level per model.
+
+    Args:
+        annual: Frame as returned by `hindcast_annual`.
+
+    Returns:
+        Model-indexed DataFrame with the three levels and the two deltas
+        against the reference, rounded to 2 decimals.
+    """
+    # The SDK delivers float32; widen first so rounding gives clean decimals.
+    period = annual.mean().astype(float)
+    reference = period["reference"].iloc[0]
+    levels = pd.DataFrame({"raw": period["raw"], "served": period["served"]})
+    levels["reference"] = reference
+    levels["raw − ref"] = levels["raw"] - reference
+    levels["served − ref"] = levels["served"] - reference
+    return levels.round(2)
+
+
+def _rounded(values: pd.Series | pd.DataFrame, decimals: int) -> pd.Series | pd.DataFrame:
+    """Round after widening to float64.
+
+    The SDK delivers float32, and rounding float32 prints values like
+    17.639999 instead of 17.64 — widen first so the rounding is clean.
+
+    Args:
+        values: Series or DataFrame to round.
+        decimals: Number of decimal places to keep.
+
+    Returns:
+        Same shape as `values`, rounded.
+    """
+    return values.astype(float).round(decimals)
+
+
+def nan_share(df: pd.DataFrame) -> pd.Series:
+    """Share of missing values per column of one frame, in percent.
+
+    Per column rather than per frame: in multi-model data each model is its
+    own dataset, so a whole-frame share would hide a model that lacks a
+    variable or a year behind the others' complete data.
+
+    Args:
+        df: Frame to check, flat or with (variable, model) MultiIndex
+            columns.
+
+    Returns:
+        Column-indexed Series of missing shares, rounded to 1 decimal and
+        named "% NaN".
+    """
+    return _rounded(df.isna().mean() * 100, 1).rename("% NaN")
+
+
+def inter_model_spread(levels: pd.DataFrame) -> pd.Series | pd.DataFrame:
+    """Measure how far apart the models sit, before and after bias correction.
+
+    Args:
+        levels: Frame as returned by `mean_levels`, either for one site or for
+            several stacked with `pd.concat({...}, names=["site"])`.
+
+    Returns:
+        Series with "raw" and "served" for a single site; one row per site,
+        in the order given, for a stacked frame. Rounded to 2 decimals.
+    """
+    versions = levels[["raw", "served"]]
+    if versions.index.nlevels == 1:
+        return (versions.max() - versions.min()).round(2)
+
+    by_site = versions.groupby(level=versions.index.names[0], sort=False)
+    return (by_site.max() - by_site.min()).round(2)
