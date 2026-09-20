@@ -55,6 +55,17 @@ def _annual_frame(values_by_model: dict[str, dict[int, float]]) -> pd.DataFrame:
     return pd.DataFrame(values_by_model)
 
 
+def _stacked_annual_frame(
+    values_by_site: dict[str, dict[str, dict[int, float]]],
+) -> pd.DataFrame:
+    """(site, model) MultiIndex frame, built the way callers stack per-site annual frames."""
+    return pd.concat(
+        {site: _annual_frame(models) for site, models in values_by_site.items()},
+        axis=1,
+        names=["site"],
+    )
+
+
 def _hindcast_frame(raw: dict, served: dict, reference: dict, years=(2020, 2021)):
     """Year-indexed (version, model) frame shaped like hindcast_annual output."""
     index = pd.Index(years, name="date")
@@ -453,3 +464,52 @@ class TestDecadalChange:
         change = decadal_change(annual, early=(2015, 2015), late=(2041, 2043))
 
         assert change["A"] == 2.0
+
+    def test_stacked_sites_return_one_row_per_site(self):
+        annual = _stacked_annual_frame(
+            {
+                "kenya_ea": {"A": {2015: 10.0, 2041: 12.0}},
+                "pampa_ar": {"A": {2015: 10.0, 2041: 14.0}},
+            }
+        )
+
+        change = decadal_change(annual, early=(2015, 2015), late=(2041, 2041))
+
+        assert change.index.tolist() == ["kenya_ea", "pampa_ar"]
+
+    def test_stacked_columns_are_models_plus_mean_and_spread(self):
+        annual = _stacked_annual_frame(
+            {
+                "kenya_ea": {"A": {2015: 10.0, 2041: 12.0}, "B": {2015: 10.0, 2041: 14.0}},
+                "pampa_ar": {"A": {2015: 10.0, 2041: 14.0}, "B": {2015: 10.0, 2041: 16.0}},
+            }
+        )
+
+        change = decadal_change(annual, early=(2015, 2015), late=(2041, 2041))
+
+        assert change.columns.tolist() == ["A", "B", "mean", "spread"]
+
+    def test_stacked_matches_single_site_call(self):
+        models = {"A": {2015: 10.0, 2041: 14.0}, "B": {2015: 10.0, 2041: 12.0}}
+        annual = _stacked_annual_frame({"pampa_ar": models})
+
+        change = decadal_change(annual, early=(2015, 2015), late=(2041, 2041))
+
+        assert (
+            change.loc["pampa_ar"].tolist()
+            == decadal_change(
+                _annual_frame(models), early=(2015, 2015), late=(2041, 2041)
+            ).tolist()
+        )
+
+    def test_stacked_sites_keep_given_order(self):
+        annual = _stacked_annual_frame(
+            {
+                "pampa_ar": {"A": {2015: 10.0, 2041: 14.0}},
+                "kenya_ea": {"A": {2015: 10.0, 2041: 12.0}},
+            }
+        )
+
+        change = decadal_change(annual, early=(2015, 2015), late=(2041, 2041))
+
+        assert change.index.tolist() == ["pampa_ar", "kenya_ea"]

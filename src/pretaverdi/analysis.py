@@ -62,7 +62,7 @@ def decadal_change(
     annual: pd.DataFrame,
     early: tuple[int, int] = (2015, 2024),
     late: tuple[int, int] = (2041, 2050),
-) -> pd.Series:
+) -> pd.Series | pd.DataFrame:
     """Per-model change in a climate variable between an early and a late decade.
 
     The per-model change is the signal: how much each model's projection
@@ -72,14 +72,27 @@ def decadal_change(
 
     Args:
         annual: Year-indexed frame with one column per model, as returned by
-            `annual_mean_temperature` or `annual_precipitation`.
+            `annual_mean_temperature` or `annual_precipitation`, or the same
+            shape stacked by site with `pd.concat({site: annual_frame, ...},
+            axis=1, names=["site"])`.
         early: Inclusive (start, end) years for the baseline window.
         late: Inclusive (start, end) years for the future window.
 
     Returns:
         Series indexed by model name, followed by "mean" and "spread", all
-        rounded to 1 decimal.
+        rounded to 1 decimal, for a single-site frame; DataFrame with one
+        row per site, in the order given, and those same columns, for a
+        stacked frame.
     """
+    if annual.columns.nlevels > 1:
+        # Same single-site path, once per site, so the per-model rounding is
+        # identical to calling decadal_change site by site — no groupby.
+        sites = annual.columns.get_level_values(0).unique()
+        rows = [decadal_change(annual[site], early, late) for site in sites]
+        result = pd.DataFrame(rows, index=sites)
+        result.index.name = annual.columns.names[0]
+        return result
+
     early_mean = annual.loc[(annual.index >= early[0]) & (annual.index <= early[1])].mean()
     late_mean = annual.loc[(annual.index >= late[0]) & (annual.index <= late[1])].mean()
     change = _rounded(late_mean - early_mean, 1)
