@@ -8,6 +8,7 @@ from pretaverdi.analysis import (
     TEMPERATURE_VARIABLES,
     annual_mean_temperature,
     annual_precipitation,
+    decadal_change,
     hindcast_annual,
     inter_model_spread,
     mean_levels,
@@ -47,6 +48,11 @@ def _multi_model_precip_frame(values_by_model: dict[str, list[float]]):
     df = pd.concat(frames, axis=1).swaplevel(axis=1)
     df.columns.names = ["variable", "model"]
     return df
+
+
+def _annual_frame(values_by_model: dict[str, dict[int, float]]) -> pd.DataFrame:
+    """Year-indexed frame with one column per model, shaped like annual_mean_temperature output."""
+    return pd.DataFrame(values_by_model)
 
 
 def _hindcast_frame(raw: dict, served: dict, reference: dict, years=(2020, 2021)):
@@ -384,3 +390,66 @@ class TestNanShare:
         share = nan_share(df)
 
         assert share.name == "% NaN"
+
+
+class TestDecadalChange:
+    def test_change_is_late_mean_minus_early_mean(self):
+        annual = _annual_frame(
+            {"A": {2015: 10.0, 2016: 12.0, 2041: 14.0, 2042: 16.0}}
+        )
+
+        change = decadal_change(annual, early=(2015, 2016), late=(2041, 2042))
+
+        assert change["A"] == 4.0
+
+    def test_mean_is_average_of_model_changes(self):
+        annual = _annual_frame(
+            {"A": {2015: 10.0, 2041: 14.0}, "B": {2015: 10.0, 2041: 12.0}}
+        )
+
+        change = decadal_change(annual, early=(2015, 2015), late=(2041, 2041))
+
+        assert change["mean"] == 3.0
+
+    def test_spread_is_max_minus_min_of_model_changes(self):
+        annual = _annual_frame(
+            {"A": {2015: 10.0, 2041: 14.0}, "B": {2015: 10.0, 2041: 12.0}}
+        )
+
+        change = decadal_change(annual, early=(2015, 2015), late=(2041, 2041))
+
+        assert change["spread"] == 2.0
+
+    def test_values_rounded_to_one_decimal(self):
+        annual = _annual_frame(
+            {
+                "A": {
+                    2015: 10.0,
+                    2016: 10.0,
+                    2017: 10.0,
+                    2041: 11.0,
+                    2042: 11.0,
+                    2043: 12.0,
+                }
+            }
+        )
+
+        change = decadal_change(annual, early=(2015, 2017), late=(2041, 2043))
+
+        assert change["A"] == 1.3
+
+    def test_float32_input_rounds_to_clean_decimals(self):
+        annual = _annual_frame({"A": {2015: 17.64, 2041: 18.45}}).astype("float32")
+
+        change = decadal_change(annual, early=(2015, 2015), late=(2041, 2041))
+
+        assert change["A"] == 0.8
+
+    def test_nan_year_in_late_window_is_skipped(self):
+        annual = _annual_frame(
+            {"A": {2015: 10.0, 2041: 10.0, 2042: float("nan"), 2043: 14.0}}
+        )
+
+        change = decadal_change(annual, early=(2015, 2015), late=(2041, 2043))
+
+        assert change["A"] == 2.0

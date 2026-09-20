@@ -58,6 +58,41 @@ def annual_precipitation(
     return annual
 
 
+def decadal_change(
+    annual: pd.DataFrame,
+    early: tuple[int, int] = (2015, 2024),
+    late: tuple[int, int] = (2041, 2050),
+) -> pd.Series:
+    """Per-model change in a climate variable between an early and a late decade.
+
+    The per-model change is the signal: how much each model's projection
+    shifts between the two windows. The spread is the structural
+    disagreement between models — how far apart their changes are, not how
+    uncertain any single model is.
+
+    Args:
+        annual: Year-indexed frame with one column per model, as returned by
+            `annual_mean_temperature` or `annual_precipitation`.
+        early: Inclusive (start, end) years for the baseline window.
+        late: Inclusive (start, end) years for the future window.
+
+    Returns:
+        Series indexed by model name, followed by "mean" and "spread", all
+        rounded to 1 decimal.
+    """
+    early_mean = annual.loc[(annual.index >= early[0]) & (annual.index <= early[1])].mean()
+    late_mean = annual.loc[(annual.index >= late[0]) & (annual.index <= late[1])].mean()
+    change = _rounded(late_mean - early_mean, 1)
+
+    # "mean" and "spread" are derived from the already-rounded per-model
+    # changes, not the raw ones, so the displayed table is self-consistent:
+    # spread equals max minus min of the values actually shown.
+    summary = pd.Series(
+        {"mean": _rounded(change.mean(), 1), "spread": _rounded(change.max() - change.min(), 1)}
+    )
+    return pd.concat([change, summary])
+
+
 def hindcast_annual(
     location: dict,
     start_date: str = "2015-01-01",
