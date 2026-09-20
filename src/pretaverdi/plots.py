@@ -66,8 +66,9 @@ def plot_model_spread(
             `pd.concat({site: annual_frame, ...}, axis=1, names=["site"])`.
         ylabel: Y-axis label, shown on every axis.
         title: Title prefix; each axis reads f"{title} — {site}".
-        divider_year: Year marking where observed data ends and projections
-            begin. None skips the divider.
+        divider_year: Where to draw the divider: years to its left overlap
+            the reanalysis record, years to its right are projection only.
+            None skips the divider.
 
     Returns:
         The Figure, unshown, so the caller decides where it goes.

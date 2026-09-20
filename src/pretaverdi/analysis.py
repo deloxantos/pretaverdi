@@ -34,9 +34,9 @@ def annual_precipitation(
     """Reduce a daily precipitation frame to annual totals, masking bad years.
 
     A partial year is not a total, so years with fewer than `min_valid_days`
-    valid days are NaN. Some sites also log zero-precipitation days that are
-    missing data stored as zeros, not weather — `floor_mm` masks annual
-    totals implausibly low to catch that.
+    valid days are NaN. Some model years store missing data as zeros, which
+    no NaN check can see — `floor_mm` masks annual totals that are too low
+    to be weather.
 
     Args:
         df: Date-indexed frame with a "precipitation_sum" column, flat or
