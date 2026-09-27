@@ -26,7 +26,7 @@ uv run jupyter lab               # Launch notebooks
 ## APIs
 
 All three Open-Meteo endpoints (no API key needed):
-- **Archive API**: Historical ERA5 reanalysis data (1940–present)
+- **Archive API**: Historical reanalysis, by default a Best Match blend of ERA5, ERA5-Land and ECMWF IFS (1940–present)
 - **Climate API**: CMIP6 climate projections (1950–2050)
 - **Forecast API**: Weather forecast (up to 16 days)
 
