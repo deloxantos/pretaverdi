@@ -1,5 +1,6 @@
 """Transforms over client frames, plus the experiments that compose them."""
 
+import numpy as np
 import pandas as pd
 
 from pretaverdi.client import get_climate_projections, get_historical_weather
@@ -241,3 +242,124 @@ def inter_model_spread(levels: pd.DataFrame) -> pd.Series | pd.DataFrame:
 
     by_site = versions.groupby(level=versions.index.names[0], sort=False)
     return (by_site.max() - by_site.min()).round(2)
+
+
+def _day_of_year(index: pd.DatetimeIndex) -> np.ndarray:
+    """Day of a 365-day year: Feb 29 shares Feb 28's slot, later days shift back.
+
+    Without this, every date after February would sit one slot later in leap
+    years, and each slot of the climatology would mix two calendar days.
+    """
+    doy = index.dayofyear.to_numpy()
+    after_feb_28 = index.is_leap_year & (doy > 59)
+    return np.where(after_feb_28, doy - 1, doy)
+
+
+def daily_climatology(
+    df: pd.DataFrame,
+    baseline: tuple[str, str] = ("1991-01-01", "2020-12-31"),
+    smooth_days: int = 31,
+) -> pd.DataFrame:
+    """Mean annual cycle of each variable: the "normal" value for each day.
+
+    Averages each day of the year over the baseline, then smooths with a
+    centered window that wraps around the new year. Thirty years give only
+    thirty samples per day, so without smoothing the cycle would still
+    carry weather noise.
+
+    Args:
+        df: Date-indexed daily frame with flat variable columns.
+        baseline: Inclusive (start, end) dates of the reference period.
+            The default is the WMO standard normal, 1991–2020.
+        smooth_days: Width of the centered smoothing window, in days.
+
+    Returns:
+        Frame indexed by day of a 365-day year (1–365), one column per
+        variable.
+    """
+    base = df.loc[baseline[0] : baseline[1]]
+    by_day = base.groupby(_day_of_year(base.index)).mean()
+    by_day.index.name = "day_of_year"
+    half = smooth_days // 2
+    wrapped = pd.concat([by_day.iloc[-half:], by_day, by_day.iloc[:half]])
+    return wrapped.rolling(smooth_days, center=True).mean().iloc[half:-half]
+
+
+def daily_anomalies(df: pd.DataFrame, climatology: pd.DataFrame) -> pd.DataFrame:
+    """Subtract the normal value of each day, leaving only the departures.
+
+    Args:
+        df: Date-indexed daily frame with flat variable columns.
+        climatology: Frame as returned by `daily_climatology`.
+
+    Returns:
+        Frame with the index and columns of `df`.
+    """
+    normal = climatology.loc[_day_of_year(df.index), df.columns]
+    return df - normal.set_axis(df.index)
+
+
+def correlation_shift(
+    raw: pd.DataFrame,
+    anomalies: pd.DataFrame,
+    target: str,
+    drivers: list[str] | None = None,
+) -> pd.DataFrame:
+    """Correlation of each variable with a target, before and after deseasoning.
+
+    Args:
+        raw: Daily frame of the original values.
+        anomalies: The same frame after `daily_anomalies`.
+        target: Column to correlate every other column against.
+        drivers: Columns to keep, in this order. None keeps every column
+            except the target.
+
+    Returns:
+        Frame indexed by the drivers, with "raw" and "anomaly"
+        Pearson correlations rounded to 2 decimals.
+    """
+    shift = pd.DataFrame(
+        {"raw": raw.corr()[target], "anomaly": anomalies.corr()[target]}
+    ).drop(target)
+    if drivers is not None:
+        shift = shift.loc[drivers]
+    shift.index.name = "variable"
+    return _rounded(shift, 2)
+
+
+def accumulated_correlation(
+    anomalies: pd.DataFrame,
+    driver: str,
+    targets: list[str],
+    windows: tuple[int, ...] = (1, 7, 14, 30, 60, 90),
+    period: tuple[str, str] | None = None,
+) -> pd.DataFrame:
+    """Correlation of targets with the driver summed over trailing windows.
+
+    Soil stores water, so it responds to the rain of past days, not only of
+    today. The window with the highest correlation is the time scale over
+    which a soil layer responds to rainfall.
+
+    Args:
+        anomalies: Daily frame, usually from `daily_anomalies`.
+        driver: Column to accumulate, e.g. "precipitation_sum".
+        targets: Columns to correlate against the accumulated driver.
+        windows: Trailing window lengths, in days; 1 is same-day.
+        period: Inclusive (start, end) dates to correlate over. Windows may
+            reach before `start`, so its first days keep a full window.
+            None uses every day with a full window.
+
+    Returns:
+        Frame indexed by window, one column per target, Pearson correlations
+        rounded to 2 decimals.
+    """
+    rows = {}
+    for window in windows:
+        accumulated = anomalies[driver].rolling(window).sum()
+        frame = anomalies[targets].assign(_driver=accumulated)
+        if period is not None:
+            frame = frame.loc[period[0] : period[1]]
+        rows[window] = frame[targets].corrwith(frame["_driver"])
+    result = pd.DataFrame(rows).T
+    result.index.name = "window"
+    return _rounded(result, 2)

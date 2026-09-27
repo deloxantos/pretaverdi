@@ -261,3 +261,104 @@ def plot_decadal_change(
         by_label.values(), by_label.keys(), loc="outside lower center", ncols=5, fontsize=9
     )
     return fig
+
+
+def plot_correlation_shift(
+    shift: pd.DataFrame,
+    title: str,
+    labels: dict[str, str] | None = None,
+    xlabel: str = "Pearson r",
+) -> plt.Figure:
+    """Plot how each correlation changes once the annual cycle is removed.
+
+    Each row joins a variable's raw correlation to its anomaly correlation.
+    A long bar toward zero means most of the raw correlation came from the
+    shared seasonal cycle; a short bar means the relation holds day to day.
+
+    Args:
+        shift: `analysis.correlation_shift` frames stacked by site with
+            `pd.concat({...}, names=["site"])`.
+        title: Figure-level title; a sentence that states the conclusion.
+        labels: Optional display names for the variables.
+        xlabel: X-axis label; name the target the correlations refer to.
+
+    Returns:
+        The Figure, unshown, so the caller decides where it goes.
+    """
+    sites = shift.index.get_level_values(0).unique()
+    rows = shift.loc[sites[0]].index
+    fig, axes = plt.subplots(
+        1,
+        len(sites),
+        figsize=(14, 1.6 + 0.6 * len(rows)),
+        layout="constrained",
+        sharex=True,
+        sharey=True,
+        squeeze=False,
+    )
+    positions = range(len(rows))
+    for ax, site in zip(axes[0], sites):
+        site_shift = shift.loc[site].loc[rows]
+        ax.hlines(positions, site_shift["raw"], site_shift["anomaly"], color="gray", linewidth=1)
+        ax.scatter(site_shift["raw"], positions, color="C1", marker="o", s=70,
+                   label="Raw values", zorder=2)
+        ax.scatter(site_shift["anomaly"], positions, color="C0", marker="s", s=70,
+                   label="Anomalies (annual cycle removed)", zorder=2)
+        ax.axvline(0, color="black", linewidth=1)
+        ax.set_xlim(-1, 1)
+        ax.set_title(site)
+        ax.set_xlabel(xlabel)
+
+    axes[0][0].set_yticks(list(positions), [(labels or {}).get(row, row) for row in rows])
+    axes[0][0].invert_yaxis()
+    fig.suptitle(title)
+    handles, legend_labels = axes[0][0].get_legend_handles_labels()
+    fig.legend(handles, legend_labels, loc="outside lower center", ncols=2, fontsize=9)
+    return fig
+
+
+def plot_window_correlation(
+    correlations: pd.DataFrame, title: str, labels: dict[str, str] | None = None
+) -> plt.Figure:
+    """Plot correlation against accumulation window, one line per soil layer.
+
+    The peak of each line is the window over which that layer responds
+    best to rainfall; it is labelled in days.
+
+    Args:
+        correlations: `analysis.accumulated_correlation` frames stacked by
+            site with `pd.concat({...}, axis=1, names=["site"])`.
+        title: Figure-level title; a sentence that states the conclusion.
+        labels: Optional display names for the target columns.
+
+    Returns:
+        The Figure, unshown, so the caller decides where it goes.
+    """
+    sites = correlations.columns.get_level_values(0).unique()
+    windows = correlations.index.tolist()
+    fig, axes = plt.subplots(
+        1, len(sites), figsize=(14, 5), layout="constrained", sharey=True, squeeze=False
+    )
+    for ax, site in zip(axes[0], sites):
+        site_corr = correlations[site]
+        for i, target in enumerate(site_corr.columns):
+            line = site_corr[target]
+            (drawn,) = ax.plot(windows, line, marker=_MARKERS[i % len(_MARKERS)],
+                               linestyle=_LINESTYLES[i % len(_LINESTYLES)],
+                               label=(labels or {}).get(target, target))
+            # Peak label in the line's colour, so it is clear which layer it names.
+            peak = line.idxmax()
+            ax.annotate(f"{peak} d", (peak, line[peak]), textcoords="offset points",
+                        xytext=(0, 8), ha="center", fontsize=9, color=drawn.get_color())
+        ax.set_xscale("log")
+        ax.set_xticks(windows, [str(w) for w in windows])
+        ax.minorticks_off()
+        ax.set_ylim(0, 1)
+        ax.set_title(site)
+        ax.set_xlabel("Rainfall accumulated over the past N days")
+
+    axes[0][0].set_ylabel("Pearson r with soil moisture anomaly")
+    fig.suptitle(title)
+    handles, legend_labels = axes[0][0].get_legend_handles_labels()
+    fig.legend(handles, legend_labels, loc="outside lower center", ncols=len(handles), fontsize=9)
+    return fig

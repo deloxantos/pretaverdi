@@ -6,6 +6,7 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 import pandas as pd
 import pytest
+from openmeteo_requests import OpenMeteoRequestsError
 from openmeteo_sdk.Model import Model
 
 from pretaverdi.client import (
@@ -387,3 +388,40 @@ class TestFetchLogging:
         entries = isolated_cache.read_text().strip().split("\n")
         assert len(entries) == 1
         assert json.loads(entries[0])["endpoint"] == ARCHIVE_API_URL
+
+
+class TestRateLimitRetry:
+    """Open-Meteo's per-minute limit is transient: wait once, then retry."""
+
+    _LIMIT = OpenMeteoRequestsError(
+        "{'reason': 'Minutely API request limit exceeded. Please try again in one minute.'}"
+    )
+
+    @patch("pretaverdi.client.time.sleep")
+    @patch("pretaverdi.client._get_session")
+    def test_waits_and_retries_once_on_minutely_limit(self, mock_session, mock_sleep):
+        mock_client = MagicMock()
+        mock_client.weather_api.side_effect = [
+            self._LIMIT,
+            [_mock_response(len(AGRI_DAILY_DEFAULTS))],
+        ]
+        mock_session.return_value = mock_client
+
+        df = get_historical_weather(-34.6, -58.4, "2024-01-01", "2024-01-10")
+
+        assert len(df) == 10
+        assert mock_client.weather_api.call_count == 2
+        mock_sleep.assert_called_once_with(60)
+
+    @patch("pretaverdi.client.time.sleep")
+    @patch("pretaverdi.client._get_session")
+    def test_other_errors_are_not_retried(self, mock_session, mock_sleep):
+        mock_client = MagicMock()
+        mock_client.weather_api.side_effect = OpenMeteoRequestsError("invalid variable")
+        mock_session.return_value = mock_client
+
+        with pytest.raises(OpenMeteoRequestsError):
+            get_historical_weather(-34.6, -58.4, "2024-01-01", "2024-01-10")
+
+        assert mock_client.weather_api.call_count == 1
+        mock_sleep.assert_not_called()
