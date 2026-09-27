@@ -2,6 +2,8 @@
 
 **Agri-climate risk assessment and food preparedness — powered by open climate data.**
 
+*The name comes from Esperanto.*
+
 PretaVerdi explores how freely available climate data can inform agricultural risk analysis and food system resilience. It connects to [Open-Meteo](https://open-meteo.com/) APIs to retrieve historical weather, climate projections, and forecasts for key agricultural regions worldwide.
 
 ## Motivation
