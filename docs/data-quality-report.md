@@ -26,6 +26,10 @@ _Observed on 2026-07-28 UTC by executing `notebooks/01-open-meteo-exploration.ip
 - Precipitation is the least reliable reanalysis variable; validation against a
   gauge-satellite product such as CHIRPS is future work
 - Soil moisture is modeled, not measured — ground-truth validation needed
+- Pinning `era5_land` returns all-null precipitation, ET₀ and shortwave radiation (live probe,
+  2026-09-27 UTC). `era5_seamless` combines ERA5-Land (temperature, soil) with ERA5 (rainfall,
+  radiation), with no IFS, and is the homogeneous choice for multi-decade baselines. Absolute soil
+  moisture differs between datasets (each has its own soil map); compare anomalies, not levels
 
 ### Findings
 
@@ -46,13 +50,23 @@ _Observed on 2026-07-28 UTC by executing `notebooks/01-open-meteo-exploration.ip
   7-28cm layer and repeatedly flattens at its 0.15 m³/m³ minimum for days at a time — consistent
   with a dry-limit floor in the model rather than measured variation. At the Midwest the two depths
   track each other closely.
-- **Precipitation is the weakest-correlated variable in the matrix.** Daily precipitation shows only
-  a pale, near-zero correlation with every other variable, including same-day soil moisture. The
-  strong structure is elsewhere: temperature, ET₀ and shortwave radiation correlate strongly and
-  positively with each other, all three correlate strongly and *negatively* with both soil-moisture
-  layers, and the two soil layers correlate strongly with each other. Practical consequence:
-  same-day rainfall is a poor proxy for soil water — lagged/accumulated precipitation will be needed
-  for any drought or water-balance indicator.
+- **Soil moisture drivers (corrected on 2026-09-27 UTC after a review of notebook 01 §4).**
+  On daily anomalies (annual cycle removed with a 1991–2020 climatology, `era5_seamless`, 2022–2023):
+  - Much of the raw correlation with temperature was the shared annual cycle: Midwest T max goes
+    from r = −0.61 to −0.09 against surface soil moisture; Pampa keeps part of it (−0.41 → −0.32).
+  - ET₀ stays the strongest negative driver (−0.46 at both sites).
+  - Same-day rain is a moderate driver (0.39 Pampa, 0.37 Midwest). Rain accumulated over past
+    windows explains far more: surface soil peaks at 14 d (Pampa, 0.78) and 7 d (Midwest, 0.72);
+    the 7–28 cm layer peaks at 30 d (Pampa, 0.84) and 14 d (Midwest, 0.75). The deeper layer
+    always peaks at the longer window.
+
+  The earlier reading recorded here on 2026-07-28 — "precipitation is near zero against every
+  variable, including same-day soil moisture" — was incorrect on two counts: same-day rain
+  correlated 0.27 / 0.24 with surface soil even on raw Best Match data (near zero only against the
+  7–28 cm layer), and the strong temperature/ET₀/radiation structure was computed on raw series,
+  where the shared annual cycle dominates. The practical consequence stands and is now quantified:
+  drought indicators must accumulate rainfall over weeks (about 1–2 for surface soil, 2–4 for the
+  root zone at these sites).
 - **Data-contract note.** Daily soil moisture must be requested as `soil_moisture_<band>_mean`; the
   bare `soil_moisture_<band>` names are hourly-only and the Archive API rejects them outright
   (`Cannot initialize ForecastVariableDaily from invalid String value ...`). Requested column names
