@@ -73,3 +73,14 @@ def test_forecast_smoke():
 
     assert df.columns.tolist() == AGRI_DAILY_DEFAULTS
     assert len(df) == 1
+
+
+def test_era5_seamless_returns_every_default_variable():
+    # era5_land alone has no precipitation, ET0 or radiation; era5_seamless
+    # fills them from ERA5, so a water balance can use one homogeneous source.
+    df = get_historical_weather(
+        -34.6, -58.4, "2022-01-01", "2022-01-10", model="era5_seamless"
+    )
+
+    assert df.columns.tolist() == AGRI_DAILY_DEFAULTS
+    assert not df.isna().any().any()
