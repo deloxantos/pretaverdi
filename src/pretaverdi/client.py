@@ -2,6 +2,7 @@
 
 import json
 import os
+import time
 from datetime import datetime, timezone
 from functools import lru_cache
 from pathlib import Path
@@ -99,12 +100,30 @@ def _daily_to_dataframe(daily, variables: list[str], url: str) -> pd.DataFrame:
     return pd.DataFrame(data).set_index("date")
 
 
+# Open-Meteo weighs a request by variables × days, so a multi-decade fetch can
+# exhaust the per-minute quota on its own. The quota resets within a minute:
+# one wait and one retry turn a failed run into a slow one.
+_MINUTELY_LIMIT = "Minutely API request limit exceeded"
+_RATE_LIMIT_WAIT_S = 60
+
+
+def _weather_api(client: openmeteo_requests.Client, url: str, params: dict) -> list:
+    """Call the SDK, waiting once and retrying if the per-minute limit is hit."""
+    try:
+        return client.weather_api(url, params=params)
+    except openmeteo_requests.OpenMeteoRequestsError as error:
+        if _MINUTELY_LIMIT not in str(error):
+            raise
+        time.sleep(_RATE_LIMIT_WAIT_S)
+        return client.weather_api(url, params=params)
+
+
 def _fetch_daily_dataframe(
     url: str, params: dict, variables: list[str]
 ) -> pd.DataFrame:
     """Invoke an Open-Meteo endpoint and build a date-indexed daily DataFrame."""
     client = _get_session()
-    responses = client.weather_api(url, params=params)
+    responses = _weather_api(client, url, params)
     if not responses:
         raise RuntimeError(f"Open-Meteo returned no results for {url}")
 
@@ -118,7 +137,7 @@ def _fetch_daily_multimodel(
 ) -> pd.DataFrame:
     """Fetch one message per model and assemble (variable, model) columns."""
     client = _get_session()
-    responses = client.weather_api(url, params=params)
+    responses = _weather_api(client, url, params)
     if len(responses) != len(models):
         raise RuntimeError(
             f"expected one response per model ({len(models)}) from {url}, "
