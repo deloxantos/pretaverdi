@@ -322,8 +322,8 @@ def plot_window_correlation(
 ) -> plt.Figure:
     """Plot correlation against accumulation window, one line per soil layer.
 
-    The peak of each line is the window over which that layer best
-    "remembers" rainfall; it is labelled in days.
+    The peak of each line is the window over which that layer responds
+    best to rainfall; it is labelled in days.
 
     Args:
         correlations: `analysis.accumulated_correlation` frames stacked by

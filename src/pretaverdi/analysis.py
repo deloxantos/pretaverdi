@@ -338,7 +338,7 @@ def accumulated_correlation(
 
     Soil stores water, so it responds to the rain of past days, not only of
     today. The window with the highest correlation is the time scale over
-    which a soil layer "remembers" rainfall.
+    which a soil layer responds to rainfall.
 
     Args:
         anomalies: Daily frame, usually from `daily_anomalies`.
