@@ -20,8 +20,11 @@ _Observed on 2026-07-28 UTC by executing `notebooks/01-open-meteo-exploration.ip
 - Recent data (last 5-7 days) may have gaps until ERA5 processing catches up
 - The default is Open-Meteo's Best Match blend of ECMWF IFS, ERA5 and ERA5-Land,
   not pure ERA5; pass `model=` to `get_historical_weather` to pin one dataset
-- Spatial resolution ~25km for ERA5, ~11km for ERA5-Land and 9km for ECMWF IFS
-  — not suitable for field-level analysis
+- ECMWF IFS is an operational forecast model, not a reanalysis
+- Spatial resolution ~25km for ERA5, ~11km for ERA5-Land and 9km for ECMWF IFS;
+  each value is a grid-cell average — not suitable for field-level analysis
+- Precipitation is the least reliable reanalysis variable; validation against a
+  gauge-satellite product such as CHIRPS is future work
 - Soil moisture is modeled, not measured — ground-truth validation needed
 
 ### Findings
