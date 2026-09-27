@@ -2,12 +2,17 @@
 
 from unittest.mock import patch
 
+import numpy as np
 import pandas as pd
 
 from pretaverdi.analysis import (
     TEMPERATURE_VARIABLES,
+    accumulated_correlation,
     annual_mean_temperature,
     annual_precipitation,
+    correlation_shift,
+    daily_anomalies,
+    daily_climatology,
     decadal_change,
     hindcast_annual,
     inter_model_spread,
@@ -513,3 +518,117 @@ class TestDecadalChange:
         change = decadal_change(annual, early=(2015, 2015), late=(2041, 2041))
 
         assert change.index.tolist() == ["pampa_ar", "kenya_ea"]
+
+
+def _seasonal_frame(start="1991-01-01", end="2023-12-31", noise=None):
+    """Daily frame with a pure annual cycle in "t" plus optional day-level noise."""
+    index = pd.date_range(start, end, freq="D", name="date", tz="UTC")
+    cycle = 10 * np.sin(2 * np.pi * index.dayofyear / 365)
+    values = cycle + (0 if noise is None else noise(len(index)))
+    return pd.DataFrame({"t": values}, index=index)
+
+
+class TestDailyClimatology:
+    def test_one_row_per_day_of_a_365_day_year(self):
+        clim = daily_climatology(_seasonal_frame())
+
+        assert clim.index.tolist() == list(range(1, 366))
+
+    def test_uses_only_the_baseline_years(self):
+        df = _seasonal_frame()
+        df.loc["2021-01-01":, "t"] += 100  # outside the 1991–2020 baseline
+
+        clim = daily_climatology(df)
+
+        assert clim["t"].max() < 11
+
+    def test_smoothing_wraps_around_the_new_year(self):
+        # A smooth cycle must survive smoothing unchanged at both year ends;
+        # a non-circular window would leave NaN or bias at days 1 and 365.
+        clim = daily_climatology(_seasonal_frame())
+
+        assert clim["t"].notna().all()
+        assert abs(clim.loc[1, "t"] - clim.loc[365, "t"]) < 0.5
+
+
+class TestDailyAnomalies:
+    def test_a_pure_annual_cycle_leaves_zero_anomalies(self):
+        df = _seasonal_frame()
+
+        anomalies = daily_anomalies(df, daily_climatology(df))
+
+        assert anomalies["t"].abs().max() < 0.5
+
+    def test_keeps_index_and_columns(self):
+        df = _seasonal_frame()
+
+        anomalies = daily_anomalies(df, daily_climatology(df))
+
+        assert anomalies.index.equals(df.index)
+        assert anomalies.columns.equals(df.columns)
+
+    def test_leap_day_shares_the_slot_of_february_28(self):
+        df = _seasonal_frame()
+
+        anomalies = daily_anomalies(df, daily_climatology(df))
+
+        assert anomalies.loc["2020-02-29"].notna().all().all()
+
+
+class TestAccumulatedCorrelation:
+    def _frame(self):
+        rng = np.random.default_rng(0)
+        index = pd.date_range("2021-01-01", "2023-12-31", freq="D", name="date")
+        rain = pd.Series(rng.normal(size=len(index)), index=index)
+        # "soil" is exactly the 7-day sum of rain: r must peak at window 7.
+        return pd.DataFrame({"rain": rain, "soil": rain.rolling(7).sum()})
+
+    def test_one_row_per_window_one_column_per_target(self):
+        result = accumulated_correlation(
+            self._frame(), "rain", ["soil"], windows=[1, 7, 30]
+        )
+
+        assert result.index.tolist() == [1, 7, 30]
+        assert result.columns.tolist() == ["soil"]
+
+    def test_peaks_at_the_true_accumulation_window(self):
+        result = accumulated_correlation(
+            self._frame(), "rain", ["soil"], windows=[1, 7, 30]
+        )
+
+        assert result["soil"].idxmax() == 7
+        assert result.loc[7, "soil"] == 1.0
+
+    def test_window_may_reach_before_the_period(self):
+        # The first day of the period still gets a full window from earlier
+        # data, so no day of the period is dropped.
+        df = self._frame()
+
+        result = accumulated_correlation(
+            df, "rain", ["soil"], windows=[7], period=("2022-01-01", "2023-12-31")
+        )
+
+        assert result.loc[7, "soil"] == 1.0
+
+
+class TestCorrelationShift:
+    def test_raw_and_anomaly_columns_without_the_target(self):
+        index = pd.date_range("2022-01-01", periods=50, freq="D")
+        rng = np.random.default_rng(1)
+        raw = pd.DataFrame(rng.normal(size=(50, 3)), index=index, columns=["a", "b", "soil"])
+        anomalies = raw * 2
+
+        result = correlation_shift(raw, anomalies, "soil")
+
+        assert result.columns.tolist() == ["raw", "anomaly"]
+        assert result.index.tolist() == ["a", "b"]
+        assert (result["raw"] == result["anomaly"]).all()  # scaling keeps r
+
+    def test_drivers_select_and_order_the_rows(self):
+        index = pd.date_range("2022-01-01", periods=50, freq="D")
+        rng = np.random.default_rng(2)
+        raw = pd.DataFrame(rng.normal(size=(50, 3)), index=index, columns=["a", "b", "soil"])
+
+        result = correlation_shift(raw, raw, "soil", drivers=["b", "a"])
+
+        assert result.index.tolist() == ["b", "a"]

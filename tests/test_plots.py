@@ -6,7 +6,15 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from pretaverdi.plots import _LINESTYLES, _MARKERS, plot_bias, plot_decadal_change, plot_model_spread
+from pretaverdi.plots import (
+    _LINESTYLES,
+    _MARKERS,
+    plot_bias,
+    plot_correlation_shift,
+    plot_decadal_change,
+    plot_model_spread,
+    plot_window_correlation,
+)
 
 matplotlib.use("Agg")
 
@@ -323,3 +331,54 @@ class TestPlotDecadalChange:
         fig = plot_decadal_change(_decadal_change_frame(), "Models agree on warming")
 
         assert fig.get_suptitle() == "Models agree on warming"
+
+
+def _shift_frame(sites=("Pampa", "Midwest")):
+    one = pd.DataFrame(
+        {"raw": [-0.6, 0.2], "anomaly": [-0.1, 0.4]},
+        index=pd.Index(["temperature_2m_max", "precipitation_sum"], name="variable"),
+    )
+    return pd.concat({site: one for site in sites}, names=["site"])
+
+
+def _window_frame(sites=("Pampa", "Midwest")):
+    one = pd.DataFrame(
+        {"soil_moisture_0_to_7cm_mean": [0.4, 0.8, 0.6], "soil_moisture_7_to_28cm_mean": [0.2, 0.6, 0.8]},
+        index=pd.Index([1, 7, 30], name="window"),
+    )
+    return pd.concat({site: one for site in sites}, axis=1, names=["site"])
+
+
+def test_correlation_shift_one_axis_per_site():
+    fig = plot_correlation_shift(_shift_frame(), title="T")
+
+    assert len(fig.axes) == 2
+    assert [ax.get_title() for ax in fig.axes] == ["Pampa", "Midwest"]
+
+
+def test_correlation_shift_legend_names_both_versions():
+    fig = plot_correlation_shift(_shift_frame(), title="T")
+
+    labels = _legend_labels(fig)
+    assert any("raw" in label.lower() for label in labels)
+    assert any("anomal" in label.lower() for label in labels)
+
+
+def test_window_correlation_one_line_per_site_and_layer():
+    fig = plot_window_correlation(_window_frame(), title="T")
+
+    assert len(fig.axes) == 2
+    assert all(len(ax.get_lines()) >= 2 for ax in fig.axes)
+
+
+def test_window_correlation_marks_each_peak():
+    fig = plot_window_correlation(_window_frame(), title="T")
+
+    texts = [t.get_text() for ax in fig.axes for t in ax.texts]
+    assert "7 d" in texts and "30 d" in texts
+
+
+def test_correlation_shift_xlabel_names_the_target():
+    fig = plot_correlation_shift(_shift_frame(), title="T", xlabel="r with soil 0–7 cm")
+
+    assert all(ax.get_xlabel() == "r with soil 0–7 cm" for ax in fig.axes)
